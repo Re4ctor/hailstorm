@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HailWatch</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIINfQjPAed5JuZj6EnAqQbT59G4O4R53j4="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./styles.css?v=marker-glass-it" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <div class="panelTop">
+          <header class="brand">
+            <div>
+              <h1>HailWatch</h1>
+              <p id="placeName">Milan, Italy</p>
+            </div>
+            <span class="statusLine" id="statusLine">Pronto</span>
+          </header>
+        </div>
+
+        <form class="search" id="searchForm">
+          <div class="fieldTop">
+            <label for="cityInput">Località</label>
+          </div>
+          <div class="searchRow">
+            <input id="cityInput" name="city" value="Milan" autocomplete="off" />
+            <button type="submit">Cerca</button>
+          </div>
+        </form>
+
+        <section class="riskPanel" aria-live="polite">
+          <div class="riskHeader">
+            <div>
+              <span>Gravità</span>
+              <strong id="riskLabel">Caricamento</strong>
+            </div>
+            <div>
+              <span>Picco</span>
+              <strong id="riskTime">Prossime 24 ore</strong>
+            </div>
+          </div>
+          <div class="riskScore">
+            <div class="scoreRing" id="scoreRing">
+              <span id="riskScore">--</span>
+              <small>rischio</small>
+            </div>
+            <div>
+              <p id="riskSummary">Analisi delle condizioni temporalesche...</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="conditions">
+          <div class="sectionTitle">Condizioni</div>
+          <div class="metrics" id="metrics"></div>
+        </section>
+
+        <section class="timeline">
+          <div class="timelineHead">
+            <div class="sectionTitle">Rischio orario</div>
+            <span id="hourRange">24 ore</span>
+          </div>
+          <div class="hours" id="hours"></div>
+        </section>
+
+        <p class="note">
+          La forza della grandine è una stima basata su temporali, CAPE, precipitazioni,
+          rovesci, raffiche e quota dello zero termico. Usa gli avvisi ufficiali per la sicurezza.
+        </p>
+      </section>
+
+      <section class="mapPane">
+        <div id="map"></div>
+        <div class="mapTop">
+          <div>
+            <span class="overline">Radar live</span>
+            <strong>Traccia temporali</strong>
+          </div>
+          <span class="liveDot" id="radarState">Online</span>
+        </div>
+        <div class="mapToolbar">
+          <button id="prevFrame" title="Frame radar precedente">‹</button>
+          <button id="playRadar" title="Riproduci animazione radar">Avvia</button>
+          <button id="nextFrame" title="Frame radar successivo">›</button>
+          <span id="frameLabel">Caricamento radar</span>
+        </div>
+        <div class="radarLegend" aria-label="Legenda intensità radar">
+          <span>Debole</span>
+          <div class="legendRamp"></div>
+          <span>Forte</span>
+        </div>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="./app.js?v=marker-glass-it"></script>
+  </body>
+</html>

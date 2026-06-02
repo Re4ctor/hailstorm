@@ -1,0 +1,13 @@
+{
+  "name": "hail-storm-electron",
+  "version": "0.1.0",
+  "description": "Electron app for city hail-risk estimates and live storm radar tracking.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^42.3.1"
+  }
+}
