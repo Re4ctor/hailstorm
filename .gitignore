@@ -3,6 +3,8 @@ dist/
 build/
 out/
 release/
+dist-web/
+.vercel/
 
 .DS_Store
 *.log
