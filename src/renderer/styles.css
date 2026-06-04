@@ -32,7 +32,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -158,6 +159,7 @@ h1 {
 .riskPanel,
 .conditions,
 .timeline,
+.compareBlock,
 .note {
   position: relative;
   z-index: 1;
@@ -198,6 +200,21 @@ input:focus {
   box-shadow: 0 0 0 3px rgb(109 167 255 / 12%);
 }
 
+select {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: rgb(9 12 16 / 62%);
+  color: var(--text);
+  outline: none;
+}
+
+select:focus {
+  border-color: rgb(109 167 255 / 72%);
+  box-shadow: 0 0 0 3px rgb(109 167 255 / 12%);
+}
+
 button {
   border: 1px solid rgb(255 255 255 / 15%);
   border-radius: 8px;
@@ -220,6 +237,78 @@ button:hover {
   background:
     linear-gradient(180deg, rgb(255 255 255 / 18%), rgb(255 255 255 / 7%)),
     rgb(24 29 35 / 62%);
+}
+
+.savedHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.savedHead button {
+  height: 28px;
+  padding: 0 8px;
+}
+
+.savedPlaces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 29px;
+  margin-top: 7px;
+}
+
+.savedChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 142px;
+  height: 28px;
+  padding: 0 8px;
+  color: #d6ddd9;
+}
+
+.savedChip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.savedChip strong {
+  color: var(--yellow);
+  font-size: 11px;
+}
+
+.savedChip.is-active {
+  border-color: rgb(94 224 160 / 46%);
+  background: rgb(94 224 160 / 10%);
+}
+
+.emptySaved {
+  align-self: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.settingGrid {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 8px;
+  align-items: center;
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.settingGrid select {
+  height: 30px;
+  padding: 0 7px;
 }
 
 .statusLine {
@@ -334,6 +423,36 @@ h2 {
   line-height: 1.38;
 }
 
+.riskExplain {
+  display: grid;
+  gap: 0;
+  margin-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.reason {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 28px;
+  border-bottom: 1px solid var(--line-soft);
+  color: #b9c1bd;
+  font-size: 11px;
+}
+
+.reason span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reason strong {
+  color: #e3e9e5;
+  font-size: 12px;
+}
+
 .metrics {
   display: grid;
   border-top: 1px solid var(--line-soft);
@@ -375,6 +494,21 @@ h2 {
   margin-bottom: 8px;
 }
 
+.severeWindow {
+  margin-bottom: 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.severeWindow.is-active {
+  border-color: rgb(245 141 84 / 38%);
+  background: rgb(245 141 84 / 9%);
+  color: #f1c9ae;
+}
+
 .timelineHead span {
   color: var(--muted);
   font-weight: 600;
@@ -400,6 +534,14 @@ h2 {
   font-size: 12px;
 }
 
+.hour.is-severe {
+  color: #ffe1c9;
+}
+
+.hour.is-severe .bar {
+  background: rgb(245 141 84 / 20%);
+}
+
 .bar {
   height: 6px;
   overflow: hidden;
@@ -422,6 +564,41 @@ h2 {
   color: #7f878d;
   font-size: 11px;
   line-height: 1.35;
+}
+
+.compareBlock {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.compareList {
+  display: grid;
+  gap: 6px;
+}
+
+.compareItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  color: #d5dcd7;
+  text-align: left;
+}
+
+.compareItem span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compareItem strong {
+  font-size: 13px;
 }
 
 .mapPane {
@@ -497,6 +674,7 @@ h2 {
   left: 16px;
   bottom: 16px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   width: fit-content;
@@ -508,6 +686,13 @@ h2 {
   min-width: 38px;
   height: 34px;
   padding: 0 11px;
+  border-color: rgb(16 20 24 / 10%);
+  background: #ffffff;
+  color: #151a1f;
+}
+
+.mapToolbar select {
+  height: 34px;
   border-color: rgb(16 20 24 / 10%);
   background: #ffffff;
   color: #151a1f;
@@ -525,6 +710,41 @@ h2 {
   transition:
     opacity 180ms ease,
     transform 180ms ease;
+}
+
+.opacityControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid rgb(16 20 24 / 10%);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #3f4a50;
+  font-size: 12px;
+}
+
+.opacityControl input {
+  width: 82px;
+  padding: 0;
+  accent-color: #e9834e;
+  box-shadow: none;
+}
+
+.refreshStamp {
+  position: absolute;
+  top: 76px;
+  left: 16px;
+  z-index: 500;
+  border: 1px solid rgb(16 20 24 / 12%);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: rgb(248 250 248 / 88%);
+  color: #4a555c;
+  font-size: 12px;
+  box-shadow: 0 8px 18px rgb(18 27 34 / 12%);
+  backdrop-filter: blur(10px);
 }
 
 #frameLabel.is-changing {
