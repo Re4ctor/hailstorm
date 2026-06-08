@@ -720,6 +720,11 @@ h2 {
   font-size: 13px;
 }
 
+.mobileSidebarToggle,
+.mobileDrawerBackdrop {
+  display: none;
+}
+
 .mapPane {
   position: relative;
   min-width: 0;
@@ -1160,18 +1165,66 @@ h2 {
   }
 
   .shell {
-    grid-template-rows: minmax(300px, 46dvh) minmax(0, 1fr);
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
     height: 100dvh;
     min-height: 0;
     overflow: hidden;
   }
 
   .panel {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 760;
+    width: min(88vw, 360px);
     gap: 10px;
     min-height: 0;
     overflow: auto;
     padding-right: 12px;
     padding-left: 12px;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+    transform: translateX(-102%);
+    transition: transform 180ms ease;
+  }
+
+  .shell.is-sidebar-open .panel {
+    transform: translateX(0);
+  }
+
+  .panel::after {
+    width: min(88vw, 360px);
+  }
+
+  .mobileDrawerBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 740;
+    display: block;
+    background: rgb(0 0 0 / 34%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+
+  .shell.is-sidebar-open .mobileDrawerBackdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .mobileSidebarToggle {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 720;
+    display: block;
+    min-width: 54px;
+    height: 38px;
+    padding: 0 10px;
+    border-color: rgb(16 20 24 / 12%);
+    background: rgb(248 250 248 / 92%);
+    color: #151a1f;
+    box-shadow: 0 8px 18px rgb(18 27 34 / 14%);
   }
 
   .brand {
@@ -1256,12 +1309,14 @@ h2 {
   }
 
   .mapPane {
+    grid-row: 1;
     min-height: 0;
+    height: 100dvh;
   }
 
   .mapTop {
     top: 10px;
-    left: 10px;
+    left: 74px;
     right: 10px;
     min-width: 0;
   }

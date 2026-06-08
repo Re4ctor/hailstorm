@@ -72,6 +72,8 @@ const copy = {
     route: "Percorso",
     history: "Storico",
     warnings: "Avvisi ufficiali",
+    sidebarOpen: "Dati",
+    sidebarClose: "Mappa",
     conditions: "Condizioni",
     hourly: "Rischio orario",
     compare: "Confronto salvati",
@@ -148,6 +150,8 @@ const copy = {
     route: "Route",
     history: "History",
     warnings: "Official warnings",
+    sidebarOpen: "Details",
+    sidebarClose: "Map",
     conditions: "Conditions",
     hourly: "Hourly risk",
     compare: "Saved comparison",
@@ -252,6 +256,8 @@ const els = {
   insightPanel: document.querySelector("#insightPanel"),
   warningLink: document.querySelector("#warningLink"),
   routeSummary: document.querySelector("#routeSummary"),
+  mobileSidebarToggle: document.querySelector("#mobileSidebarToggle"),
+  mobileDrawerBackdrop: document.querySelector("#mobileDrawerBackdrop"),
   radarOpacity: document.querySelector("#radarOpacity"),
   refreshForecast: document.querySelector("#refreshForecast"),
   refreshStamp: document.querySelector("#refreshStamp"),
@@ -888,6 +894,12 @@ function configureAutoRefresh() {
   }
 }
 
+function setMobileSidebar(open) {
+  document.querySelector(".shell").classList.toggle("is-sidebar-open", open);
+  els.mobileSidebarToggle.setAttribute("aria-expanded", String(open));
+  els.mobileSidebarToggle.textContent = open ? t("sidebarClose") : t("sidebarOpen");
+}
+
 function renderStaticText() {
   document.querySelector("button[type='submit']").textContent = t("search");
   els.locationLabel.textContent = t("location");
@@ -916,6 +928,7 @@ function renderStaticText() {
   els.legendWeak.textContent = t("weak");
   els.legendStrong.textContent = t("strong");
   els.refreshForecast.textContent = t("refresh");
+  els.mobileSidebarToggle.textContent = document.querySelector(".shell").classList.contains("is-sidebar-open") ? t("sidebarClose") : t("sidebarOpen");
   els.playRadar.textContent = radarTimer ? t("pause") : t("play");
   els.mapLayer.setAttribute("title", t("mapLayerTitle"));
   document.querySelector(".radarLegend").setAttribute("aria-label", t("legendLabel"));
@@ -1036,6 +1049,7 @@ async function maybeNotify(place, max) {
 async function loadPlace(place) {
   try {
     currentPlace = place;
+    setMobileSidebar(false);
     ensureMap(place);
     renderSavedPlaces();
 
@@ -1227,6 +1241,12 @@ els.compareList.addEventListener("click", (event) => {
 
 els.savePlace.addEventListener("click", saveCurrentPlace);
 els.useLocation.addEventListener("click", loadCurrentLocation);
+els.mobileSidebarToggle.addEventListener("click", () => {
+  const open = !document.querySelector(".shell").classList.contains("is-sidebar-open");
+  setMobileSidebar(open);
+  if (map) setTimeout(() => map.invalidateSize(), 220);
+});
+els.mobileDrawerBackdrop.addEventListener("click", () => setMobileSidebar(false));
 els.copyReport.addEventListener("click", copyCurrentReport);
 els.exportReport.addEventListener("click", exportCurrentReport);
 els.renamePlace.addEventListener("click", renameCurrentSavedPlace);

@@ -14,7 +14,7 @@
   </head>
   <body>
     <main class="shell">
-      <section class="panel">
+      <section class="panel" id="sidebar">
         <div class="panelTop">
           <header class="brand">
             <div>
@@ -128,8 +128,11 @@
         </p>
       </section>
 
+      <div class="mobileDrawerBackdrop" id="mobileDrawerBackdrop"></div>
+
       <section class="mapPane">
         <div id="map"></div>
+        <button type="button" class="mobileSidebarToggle" id="mobileSidebarToggle" aria-controls="sidebar" aria-expanded="false">Dati</button>
         <div class="mapTop">
           <div>
             <span class="overline" id="radarTitle">Radar live</span>
