@@ -721,7 +721,8 @@ h2 {
 }
 
 .mobileSidebarToggle,
-.mobileDrawerBackdrop {
+.mobileDrawerBackdrop,
+.mobileForecastSheet {
   display: none;
 }
 
@@ -1242,6 +1243,74 @@ h2 {
     opacity: 0.82;
   }
 
+  .mobileForecastSheet {
+    position: absolute;
+    right: 10px;
+    bottom: calc(202px + env(safe-area-inset-bottom));
+    left: 10px;
+    z-index: 710;
+    display: grid;
+    gap: 8px;
+    border: 1px solid rgb(16 20 24 / 12%);
+    border-radius: 12px;
+    padding: 7px 12px 11px;
+    background: rgb(248 250 248 / 95%);
+    color: #151a1f;
+    text-align: left;
+    box-shadow: 0 14px 34px rgb(18 27 34 / 18%);
+  }
+
+  .sheetHandle {
+    justify-self: center;
+    width: 34px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgb(16 20 24 / 18%);
+  }
+
+  .sheetTop {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .sheetPlace,
+  .sheetMore span {
+    display: block;
+    overflow: hidden;
+    color: #5b666d;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sheetTop strong {
+    display: block;
+    margin-top: 2px;
+    overflow: hidden;
+    color: #151a1f;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sheetScore {
+    font-size: 28px;
+    line-height: 1;
+    font-weight: 780;
+  }
+
+  .sheetMore {
+    display: none;
+    gap: 5px;
+    padding-top: 2px;
+  }
+
+  .mobileForecastSheet.is-open .sheetMore {
+    display: grid;
+  }
+
   .brand {
     grid-template-columns: 1fr;
     gap: 4px;
@@ -1384,8 +1453,12 @@ h2 {
 
   .radarLegend {
     right: 10px;
-    bottom: calc(200px + env(safe-area-inset-bottom));
+    bottom: calc(302px + env(safe-area-inset-bottom));
     background: rgb(248 250 248 / 92%);
+  }
+
+  .mobileForecastSheet.is-open + .radarLegend {
+    display: none;
   }
 
   .leaflet-control-zoom {

@@ -256,6 +256,13 @@ const els = {
   insightPanel: document.querySelector("#insightPanel"),
   warningLink: document.querySelector("#warningLink"),
   routeSummary: document.querySelector("#routeSummary"),
+  mobileForecastSheet: document.querySelector("#mobileForecastSheet"),
+  sheetPlace: document.querySelector("#sheetPlace"),
+  sheetRiskLabel: document.querySelector("#sheetRiskLabel"),
+  sheetScore: document.querySelector("#sheetScore"),
+  sheetPeak: document.querySelector("#sheetPeak"),
+  sheetSevere: document.querySelector("#sheetSevere"),
+  sheetTrend: document.querySelector("#sheetTrend"),
   mobileSidebarToggle: document.querySelector("#mobileSidebarToggle"),
   mobileDrawerBackdrop: document.querySelector("#mobileDrawerBackdrop"),
   radarOpacity: document.querySelector("#radarOpacity"),
@@ -685,6 +692,13 @@ function renderRisk(place, forecast) {
 
   els.warningLink.href = warningUrl(place);
   els.warningLink.textContent = t("warnings");
+  els.sheetPlace.textContent = place.name;
+  els.sheetRiskLabel.textContent = `${t("riskPrefix")} ${label.toLowerCase()}`;
+  els.sheetScore.textContent = String(score);
+  els.sheetScore.style.color = color;
+  els.sheetPeak.textContent = `${preferences.language === "it" ? "Picco" : "Peak"}: ${formatDateTime(max.time, forecast.timezone)}`;
+  els.sheetSevere.textContent = severeWindow || t("noRisk");
+  els.sheetTrend.textContent = `${t("trend")}: ${riskTrend(rows)}`;
 
   els.hours.innerHTML = selectedRows(rows)
     .map((row) => {
@@ -1247,6 +1261,11 @@ els.mobileSidebarToggle.addEventListener("click", () => {
   if (map) setTimeout(() => map.invalidateSize(), 220);
 });
 els.mobileDrawerBackdrop.addEventListener("click", () => setMobileSidebar(false));
+els.mobileForecastSheet.addEventListener("click", () => {
+  const open = !els.mobileForecastSheet.classList.contains("is-open");
+  els.mobileForecastSheet.classList.toggle("is-open", open);
+  els.mobileForecastSheet.setAttribute("aria-expanded", String(open));
+});
 els.copyReport.addEventListener("click", copyCurrentReport);
 els.exportReport.addEventListener("click", exportCurrentReport);
 els.renamePlace.addEventListener("click", renameCurrentSavedPlace);
