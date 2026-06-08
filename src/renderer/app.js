@@ -51,6 +51,14 @@ const copy = {
     saved: "Salvati",
     threshold: "Avviso da",
     languageLabel: "Lingua",
+    forecastRange: "Periodo",
+    useLocation: "Posizione",
+    currentLocation: "Posizione attuale",
+    locating: "Rilevo posizione...",
+    locationUnavailable: "Posizione non disponibile.",
+    copyReport: "Copia report",
+    copiedReport: "Report copiato",
+    copyFailed: "Copia non riuscita",
     conditions: "Condizioni",
     hourly: "Rischio orario",
     compare: "Confronto salvati",
@@ -62,7 +70,7 @@ const copy = {
     weak: "Debole",
     strong: "Forte",
     noSaved: "Nessuna località salvata",
-    noRisk: "Nessuna finestra severa nelle prossime 24 ore",
+    noRisk: "Nessuna finestra severa nel periodo selezionato",
     severe: "Finestra severa",
     updatedNever: "Mai aggiornato",
     updated: "Aggiornato",
@@ -106,6 +114,14 @@ const copy = {
     saved: "Saved",
     threshold: "Alert from",
     languageLabel: "Language",
+    forecastRange: "Range",
+    useLocation: "Location",
+    currentLocation: "Current location",
+    locating: "Detecting location...",
+    locationUnavailable: "Location unavailable.",
+    copyReport: "Copy report",
+    copiedReport: "Report copied",
+    copyFailed: "Copy failed",
     conditions: "Conditions",
     hourly: "Hourly risk",
     compare: "Saved comparison",
@@ -117,7 +133,7 @@ const copy = {
     weak: "Weak",
     strong: "Strong",
     noSaved: "No saved locations",
-    noRisk: "No severe window in the next 24 hours",
+    noRisk: "No severe window in the selected range",
     severe: "Severe window",
     updatedNever: "Never updated",
     updated: "Updated",
@@ -194,6 +210,10 @@ const els = {
   compareList: document.querySelector("#compareList"),
   riskThreshold: document.querySelector("#riskThreshold"),
   languageSelect: document.querySelector("#languageSelect"),
+  forecastHours: document.querySelector("#forecastHours"),
+  forecastRangeLabel: document.querySelector("#forecastRangeLabel"),
+  useLocation: document.querySelector("#useLocation"),
+  copyReport: document.querySelector("#copyReport"),
   radarOpacity: document.querySelector("#radarOpacity"),
   refreshForecast: document.querySelector("#refreshForecast"),
   refreshStamp: document.querySelector("#refreshStamp"),
@@ -217,6 +237,7 @@ let preferences = {
   language: "it",
   riskThreshold: 50,
   radarOpacity: 52,
+  forecastHours: 24,
   mapLayer: "voyager",
   ...readJson(storageKeys.prefs, {})
 };
@@ -242,7 +263,7 @@ function placeKey(place) {
 }
 
 function placeLabel(place) {
-  return `${place.name}, ${place.country}`;
+  return [place.name, place.country].filter(Boolean).join(", ");
 }
 
 function cityMarkerIcon(place) {
@@ -421,10 +442,19 @@ function formatTimelineLabel(time, timezone, firstTime) {
   return `${prefix} ${formatHour(time, timezone)}`;
 }
 
+function selectedForecastHours() {
+  return Number(preferences.forecastHours) === 48 ? 48 : 24;
+}
+
+function selectedRows(rows) {
+  return rows.slice(0, Math.min(rows.length, selectedForecastHours()));
+}
+
 function formatRangeLabel(rows, timezone) {
-  if (!rows.length) return "24 ore";
-  const first = rows[0].time;
-  const last = rows[Math.min(rows.length, 24) - 1].time;
+  if (!rows.length) return `${selectedForecastHours()}h`;
+  const visibleRows = selectedRows(rows);
+  const first = visibleRows[0].time;
+  const last = visibleRows[visibleRows.length - 1].time;
   return `${formatHour(first, timezone)} -> ${formatHour(last, timezone)}`;
 }
 
@@ -439,20 +469,22 @@ function formatDateTime(time, timezone) {
 
 function findSevereWindow(rows, timezone) {
   const threshold = Number(preferences.riskThreshold);
+  const visibleRows = selectedRows(rows);
+  const lastIndex = visibleRows.length - 1;
   let start = -1;
   let best = null;
-  rows.slice(0, 24).forEach((row, index) => {
+  visibleRows.forEach((row, index) => {
     if (row.score >= threshold && start === -1) start = index;
-    if ((row.score < threshold || index === 23) && start !== -1) {
-      const end = row.score >= threshold && index === 23 ? index : index - 1;
-      const segment = rows.slice(start, end + 1);
+    if ((row.score < threshold || index === lastIndex) && start !== -1) {
+      const end = row.score >= threshold && index === lastIndex ? index : index - 1;
+      const segment = visibleRows.slice(start, end + 1);
       const peak = segment.reduce((max, item) => Math.max(max, item.score), 0);
       if (!best || peak > best.peak) best = { start, end, peak };
       start = -1;
     }
   });
   if (!best) return null;
-  return `${t("severe")}: ${formatHour(rows[best.start].time, timezone)}-${formatHour(rows[best.end].time, timezone)} · ${best.peak}`;
+  return `${t("severe")}: ${formatHour(visibleRows[best.start].time, timezone)}-${formatHour(visibleRows[best.end].time, timezone)} · ${best.peak}`;
 }
 
 function renderRisk(place, forecast) {
@@ -472,9 +504,10 @@ function renderRisk(place, forecast) {
   )}% ${preferences.language === "it" ? "probabilità pioggia" : "rain probability"}. CAPE ${Math.round(max.cape || 0)} J/kg.`;
   els.scoreRing.style.borderColor = color;
   els.scoreRing.style.setProperty("--risk-color", color);
+  const severeWindow = findSevereWindow(rows, forecast.timezone);
   els.hourRange.textContent = formatRangeLabel(rows, forecast.timezone);
-  els.severeWindow.textContent = findSevereWindow(rows, forecast.timezone) || t("noRisk");
-  els.severeWindow.classList.toggle("is-active", Boolean(findSevereWindow(rows, forecast.timezone)));
+  els.severeWindow.textContent = severeWindow || t("noRisk");
+  els.severeWindow.classList.toggle("is-active", Boolean(severeWindow));
 
   els.metrics.innerHTML = [
     [t("metrics").signal, weatherText(max.weather_code)],
@@ -498,8 +531,7 @@ function renderRisk(place, forecast) {
         .join("")
     : `<div class="reason"><span>${t("explanationEmpty")}</span><strong>0</strong></div>`;
 
-  els.hours.innerHTML = rows
-    .slice(0, 24)
+  els.hours.innerHTML = selectedRows(rows)
     .map((row) => {
       const rowColor = riskColor(row.score);
       const severe = row.score >= Number(preferences.riskThreshold) ? " is-severe" : "";
@@ -536,7 +568,7 @@ async function getForecast(place) {
     "hourly",
     "weather_code,precipitation_probability,precipitation,showers,cape,wind_gusts_10m,freezing_level_height"
   );
-  url.searchParams.set("forecast_hours", "24");
+  url.searchParams.set("forecast_hours", String(selectedForecastHours()));
   url.searchParams.set("timezone", "auto");
 
   const response = await fetch(url);
@@ -668,6 +700,9 @@ function renderStaticText() {
   els.savedTitle.textContent = t("saved");
   els.thresholdLabel.textContent = t("threshold");
   els.languageLabel.textContent = t("languageLabel");
+  els.forecastRangeLabel.textContent = t("forecastRange");
+  els.useLocation.textContent = t("useLocation");
+  els.copyReport.textContent = t("copyReport");
   els.conditionsTitle.textContent = t("conditions");
   els.hourlyTitle.textContent = t("hourly");
   els.compareTitle.textContent = t("compare");
@@ -829,6 +864,65 @@ function rerenderCurrent() {
   refreshSavedComparison();
 }
 
+async function loadCurrentLocation() {
+  if (!("geolocation" in navigator)) {
+    setStatus(t("locationUnavailable"));
+    return;
+  }
+
+  setStatus(t("locating"));
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const place = {
+        name: t("currentLocation"),
+        country: "",
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      };
+      els.cityInput.value = place.name;
+      loadPlace(place);
+    },
+    () => setStatus(t("locationUnavailable")),
+    { enableHighAccuracy: true, maximumAge: 600000, timeout: 12000 }
+  );
+}
+
+function buildReport() {
+  if (!currentPlace || !currentForecast) return "";
+  const rows = getHourlyRows(currentForecast);
+  const max = rows.reduce((best, row) => (row.score > best.score ? row : best), rows[0]);
+  const severeWindow = findSevereWindow(rows, currentForecast.timezone) || t("noRisk");
+  return [
+    `HailWatch · ${placeLabel(currentPlace)}`,
+    `${t("riskPrefix")}: ${max.score} (${riskLabel(max.score)})`,
+    `${preferences.language === "it" ? "Picco" : "Peak"}: ${formatDateTime(max.time, currentForecast.timezone)}`,
+    severeWindow,
+    `${weatherText(max.weather_code)} · CAPE ${Math.round(max.cape || 0)} J/kg · ${Math.round(max.precipitation_probability || 0)}%`
+  ].join("\n");
+}
+
+async function copyCurrentReport() {
+  const report = buildReport();
+  if (!report) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(report);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = report;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+    setStatus(t("copiedReport"));
+  } catch {
+    setStatus(t("copyFailed"));
+  }
+}
+
 els.form.addEventListener("submit", (event) => {
   event.preventDefault();
   const city = els.cityInput.value.trim();
@@ -856,6 +950,8 @@ els.compareList.addEventListener("click", (event) => {
 });
 
 els.savePlace.addEventListener("click", saveCurrentPlace);
+els.useLocation.addEventListener("click", loadCurrentLocation);
+els.copyReport.addEventListener("click", copyCurrentReport);
 els.prevFrame.addEventListener("click", () => showRadarFrame(frameIndex - 1));
 els.nextFrame.addEventListener("click", () => showRadarFrame(frameIndex + 1));
 els.playRadar.addEventListener("click", toggleRadarPlayback);
@@ -871,6 +967,11 @@ els.languageSelect.addEventListener("change", () => {
   preferences.language = els.languageSelect.value;
   persistPreferences();
   rerenderCurrent();
+});
+els.forecastHours.addEventListener("change", () => {
+  preferences.forecastHours = Number(els.forecastHours.value);
+  persistPreferences();
+  if (currentPlace) loadPlace(currentPlace);
 });
 els.radarOpacity.addEventListener("input", () => {
   preferences.radarOpacity = Number(els.radarOpacity.value);
@@ -888,6 +989,7 @@ window.addEventListener("resize", () => {
 
 els.riskThreshold.value = String(preferences.riskThreshold);
 els.languageSelect.value = preferences.language;
+els.forecastHours.value = String(selectedForecastHours());
 els.radarOpacity.value = String(preferences.radarOpacity);
 els.mapLayer.value = preferences.mapLayer;
 renderStaticText();

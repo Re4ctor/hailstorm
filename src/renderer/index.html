@@ -28,6 +28,7 @@
         <form class="search" id="searchForm">
           <div class="fieldTop">
             <label for="cityInput" id="locationLabel">Località</label>
+            <button type="button" class="textButton" id="useLocation">Posizione</button>
           </div>
           <div class="searchRow">
             <input id="cityInput" name="city" value="Milan" autocomplete="off" />
@@ -51,7 +52,13 @@
               <option value="it" selected>IT</option>
               <option value="en">EN</option>
             </select>
+            <label for="forecastHours" id="forecastRangeLabel">Periodo</label>
+            <select id="forecastHours">
+              <option value="24" selected>24h</option>
+              <option value="48">48h</option>
+            </select>
           </div>
+          <button type="button" class="wideAction" id="copyReport">Copia report</button>
         </form>
 
         <section class="riskPanel" aria-live="polite">
