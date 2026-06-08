@@ -7,7 +7,9 @@ const storageKeys = {
   saved: "hailWatch.savedPlaces",
   prefs: "hailWatch.preferences",
   lastPlace: "hailWatch.lastPlace",
-  notified: "hailWatch.notified"
+  notified: "hailWatch.notified",
+  forecastCache: "hailWatch.forecastCache",
+  history: "hailWatch.history"
 };
 
 const mapLayers = {
@@ -57,8 +59,19 @@ const copy = {
     locating: "Rilevo posizione...",
     locationUnavailable: "Posizione non disponibile.",
     copyReport: "Copia report",
+    exportReport: "Esporta",
+    renamePlace: "Rinomina",
     copiedReport: "Report copiato",
     copyFailed: "Copia non riuscita",
+    exportedReport: "Report esportato",
+    autoRefresh: "Auto",
+    detailMode: "Vista",
+    detailedMode: "Dettaglio",
+    compactMode: "Compatta",
+    trend: "Trend",
+    route: "Percorso",
+    history: "Storico",
+    warnings: "Avvisi ufficiali",
     conditions: "Condizioni",
     hourly: "Rischio orario",
     compare: "Confronto salvati",
@@ -102,7 +115,9 @@ const copy = {
       rain: "Probabilità pioggia",
       gusts: "Raffiche",
       showers: "Rovesci",
-      freezing: "Zero termico"
+      freezing: "Zero termico",
+      windDirection: "Direzione vento",
+      totalRain: "Pioggia totale"
     }
   },
   en: {
@@ -120,8 +135,19 @@ const copy = {
     locating: "Detecting location...",
     locationUnavailable: "Location unavailable.",
     copyReport: "Copy report",
+    exportReport: "Export",
+    renamePlace: "Rename",
     copiedReport: "Report copied",
     copyFailed: "Copy failed",
+    exportedReport: "Report exported",
+    autoRefresh: "Auto",
+    detailMode: "View",
+    detailedMode: "Detailed",
+    compactMode: "Compact",
+    trend: "Trend",
+    route: "Route",
+    history: "History",
+    warnings: "Official warnings",
     conditions: "Conditions",
     hourly: "Hourly risk",
     compare: "Saved comparison",
@@ -165,7 +191,9 @@ const copy = {
       rain: "Rain probability",
       gusts: "Gusts",
       showers: "Showers",
-      freezing: "Freezing level"
+      freezing: "Freezing level",
+      windDirection: "Wind direction",
+      totalRain: "Total rain"
     }
   }
 };
@@ -214,6 +242,16 @@ const els = {
   forecastRangeLabel: document.querySelector("#forecastRangeLabel"),
   useLocation: document.querySelector("#useLocation"),
   copyReport: document.querySelector("#copyReport"),
+  exportReport: document.querySelector("#exportReport"),
+  renamePlace: document.querySelector("#renamePlace"),
+  suggestions: document.querySelector("#suggestions"),
+  autoRefresh: document.querySelector("#autoRefresh"),
+  autoRefreshLabel: document.querySelector("#autoRefreshLabel"),
+  detailMode: document.querySelector("#detailMode"),
+  detailModeLabel: document.querySelector("#detailModeLabel"),
+  insightPanel: document.querySelector("#insightPanel"),
+  warningLink: document.querySelector("#warningLink"),
+  routeSummary: document.querySelector("#routeSummary"),
   radarOpacity: document.querySelector("#radarOpacity"),
   refreshForecast: document.querySelector("#refreshForecast"),
   refreshStamp: document.querySelector("#refreshStamp"),
@@ -228,9 +266,12 @@ let previousRadarLayer;
 let radarFrames = [];
 let frameIndex = 0;
 let radarTimer = null;
+let autoRefreshTimer = null;
 let currentPlace = null;
 let currentForecast = null;
 let lastUpdatedAt = null;
+let savedMarkers = [];
+let searchSuggestions = [];
 
 let savedPlaces = readJson(storageKeys.saved, []);
 let preferences = {
@@ -238,6 +279,8 @@ let preferences = {
   riskThreshold: 50,
   radarOpacity: 52,
   forecastHours: 24,
+  autoRefresh: 0,
+  detailMode: "detailed",
   mapLayer: "voyager",
   ...readJson(storageKeys.prefs, {})
 };
@@ -256,6 +299,10 @@ function writeJson(key, value) {
 
 function t(key) {
   return copy[preferences.language]?.[key] || copy.it[key] || key;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]);
 }
 
 function placeKey(place) {
@@ -278,6 +325,34 @@ function cityMarkerIcon(place) {
   });
 }
 
+function savedMarkerIcon(place) {
+  const score = Number(place.lastScore || 0);
+  return L.divIcon({
+    className: "cityMarker savedMapMarker",
+    html: `
+      <span class="cityMarkerPin" style="--marker-color:${riskColor(score)}"></span>
+      <span class="cityMarkerLabel">${escapeHtml(place.name)} ${Number.isFinite(place.lastScore) ? place.lastScore : ""}</span>
+    `,
+    iconSize: [160, 38],
+    iconAnchor: [14, 19]
+  });
+}
+
+function renderSavedMarkers() {
+  if (!map) return;
+  savedMarkers.forEach((item) => map.removeLayer(item));
+  savedMarkers = savedPlaces
+    .filter((place) => !currentPlace || placeKey(place) !== placeKey(currentPlace))
+    .map((place) =>
+      L.marker([place.latitude, place.longitude], {
+        icon: savedMarkerIcon(place),
+        zIndexOffset: 650
+      })
+        .addTo(map)
+        .on("click", () => loadPlace(place))
+    );
+}
+
 function setStatus(message) {
   els.status.textContent = message;
 }
@@ -295,6 +370,22 @@ function riskLabel(score) {
   if (score >= 25) return t("moderate");
   if (score >= 10) return t("low");
   return t("minimum");
+}
+
+function windDirectionLabel(degrees) {
+  if (!Number.isFinite(Number(degrees))) return "--";
+  const labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  return labels[Math.round(Number(degrees) / 45) % 8];
+}
+
+function warningUrl(place) {
+  const country = String(place?.country || "").toLowerCase();
+  if (country.includes("ital")) return "https://www.protezionecivile.gov.it/it/approfondimento/allertamento-meteo-idro/";
+  if (country.includes("united states") || country.includes("usa")) return "https://www.weather.gov/alerts";
+  if (country.includes("united kingdom")) return "https://www.metoffice.gov.uk/weather/warnings-and-advice/uk-warnings";
+  if (country.includes("france")) return "https://vigilance.meteofrance.fr/";
+  if (country.includes("germany")) return "https://www.dwd.de/EN/weather/warnings/warnings_node.html";
+  return "https://meteoalarm.org/";
 }
 
 function weatherText(code) {
@@ -450,6 +541,46 @@ function selectedRows(rows) {
   return rows.slice(0, Math.min(rows.length, selectedForecastHours()));
 }
 
+function stormIntensity(row) {
+  const code = Number(row.weather_code || 0);
+  const codePoints = code === 99 ? 100 : code === 96 ? 85 : code === 95 ? 70 : [80, 81, 82].includes(code) ? 45 : 0;
+  const rainPoints = Math.min(100, Number(row.precipitation_probability || 0));
+  const gustPoints = Math.min(100, Number(row.wind_gusts_10m || 0));
+  return Math.round(Math.max(codePoints, rainPoints * 0.7, gustPoints));
+}
+
+function riskTrend(rows) {
+  const visibleRows = selectedRows(rows);
+  if (visibleRows.length < 4) return "--";
+  const early = visibleRows.slice(0, 3).reduce((sum, row) => sum + row.score, 0) / 3;
+  const next = visibleRows.slice(3, 6).reduce((sum, row) => sum + row.score, 0) / Math.min(3, visibleRows.length - 3);
+  if (next - early >= 8) return preferences.language === "it" ? "in aumento" : "rising";
+  if (early - next >= 8) return preferences.language === "it" ? "in calo" : "falling";
+  return preferences.language === "it" ? "stabile" : "stable";
+}
+
+function totalPrecipitation(rows) {
+  return selectedRows(rows).reduce((sum, row) => sum + Number(row.precipitation || 0) + Number(row.showers || 0), 0);
+}
+
+function historyDelta(place, score) {
+  const history = readJson(storageKeys.history, {});
+  const entries = history[placeKey(place)] || [];
+  const previous = entries[entries.length - 1]?.score;
+  if (!Number.isFinite(previous)) return preferences.language === "it" ? "primo controllo" : "first check";
+  const diff = score - previous;
+  if (Math.abs(diff) < 3) return preferences.language === "it" ? "come prima" : "unchanged";
+  return `${diff > 0 ? "+" : ""}${diff}`;
+}
+
+function rememberHistory(place, score) {
+  const history = readJson(storageKeys.history, {});
+  const key = placeKey(place);
+  const entries = [...(history[key] || []), { at: Date.now(), score }].slice(-20);
+  history[key] = entries;
+  writeJson(storageKeys.history, history);
+}
+
 function formatRangeLabel(rows, timezone) {
   if (!rows.length) return `${selectedForecastHours()}h`;
   const visibleRows = selectedRows(rows);
@@ -484,12 +615,16 @@ function findSevereWindow(rows, timezone) {
     }
   });
   if (!best) return null;
-  return `${t("severe")}: ${formatHour(visibleRows[best.start].time, timezone)}-${formatHour(visibleRows[best.end].time, timezone)} · ${best.peak}`;
+  const duration = best.end - best.start + 1;
+  const peakRow = visibleRows.slice(best.start, best.end + 1).reduce((top, row) => (row.score > top.score ? row : top), visibleRows[best.start]);
+  const cause = peakRow.reasons?.[0]?.label || weatherText(peakRow.weather_code);
+  return `${t("severe")}: ${formatHour(visibleRows[best.start].time, timezone)}-${formatHour(visibleRows[best.end].time, timezone)} · ${duration}h · ${best.peak} · ${cause}`;
 }
 
 function renderRisk(place, forecast) {
   const rows = getHourlyRows(forecast);
-  const max = rows.reduce((best, row) => (row.score > best.score ? row : best), rows[0]);
+  const visibleRows = selectedRows(rows);
+  const max = visibleRows.reduce((best, row) => (row.score > best.score ? row : best), visibleRows[0] || rows[0]);
   const score = max?.score || 0;
   const color = riskColor(score);
   const label = riskLabel(score);
@@ -514,7 +649,9 @@ function renderRisk(place, forecast) {
     [t("metrics").cape, `${Math.round(max.cape || 0)} J/kg`],
     [t("metrics").rain, `${Math.round(max.precipitation_probability || 0)}%`],
     [t("metrics").gusts, `${Math.round(max.wind_gusts_10m || 0)} km/h`],
+    [t("metrics").windDirection, windDirectionLabel(max.wind_direction_10m)],
     [t("metrics").showers, `${Number(max.showers || 0).toFixed(1)} mm`],
+    [t("metrics").totalRain, `${totalPrecipitation(rows).toFixed(1)} mm`],
     [t("metrics").freezing, `${Math.round(max.freezing_level_height || 0)} m`]
   ]
     .map(([name, value]) => `<div class="metric"><span>${name}</span><strong>${value}</strong></div>`)
@@ -531,33 +668,59 @@ function renderRisk(place, forecast) {
         .join("")
     : `<div class="reason"><span>${t("explanationEmpty")}</span><strong>0</strong></div>`;
 
+  els.insightPanel.innerHTML = [
+    [t("trend"), riskTrend(rows)],
+    [t("metrics").totalRain, `${totalPrecipitation(rows).toFixed(1)} mm`],
+    [t("history"), historyDelta(place, score)],
+    [t("metrics").windDirection, windDirectionLabel(max.wind_direction_10m)]
+  ]
+    .map(([labelText, value]) => `<div class="insightItem"><span>${labelText}</span><strong>${value}</strong></div>`)
+    .join("");
+
+  els.warningLink.href = warningUrl(place);
+  els.warningLink.textContent = t("warnings");
+
   els.hours.innerHTML = selectedRows(rows)
     .map((row) => {
       const rowColor = riskColor(row.score);
+      const intensity = stormIntensity(row);
       const severe = row.score >= Number(preferences.riskThreshold) ? " is-severe" : "";
       return `<div class="hour${severe}">
         <span>${formatTimelineLabel(row.time, forecast.timezone, rows[0].time)}</span>
-        <div class="bar"><div class="fill" style="width: ${row.score}%; background: ${rowColor}"></div></div>
+        <div class="bars">
+          <div class="bar"><div class="fill" style="width: ${row.score}%; background: ${rowColor}"></div></div>
+          <div class="bar is-storm"><div class="fill" style="width: ${intensity}%"></div></div>
+        </div>
         <strong>${row.score}</strong>
       </div>`;
     })
     .join("");
 
+  rememberHistory(place, score);
   maybeNotify(place, max);
 }
 
-async function searchCity(name) {
+async function searchCities(name, count = 5) {
   const url = new URL(geocodeUrl);
   url.searchParams.set("name", name);
-  url.searchParams.set("count", "1");
+  url.searchParams.set("count", String(count));
   url.searchParams.set("language", preferences.language);
   url.searchParams.set("format", "json");
 
   const response = await fetch(url);
   if (!response.ok) throw new Error(preferences.language === "it" ? "Ricerca città non riuscita." : "City search failed.");
   const data = await response.json();
-  if (!data.results?.length) throw new Error(preferences.language === "it" ? "Nessuna città trovata." : "No city found.");
-  return data.results[0];
+  return data.results || [];
+}
+
+async function searchCity(name) {
+  const results = await searchCities(name, 1);
+  if (!results.length) throw new Error(preferences.language === "it" ? "Nessuna città trovata." : "No city found.");
+  return results[0];
+}
+
+function cacheKey(place) {
+  return `${placeKey(place)}:${selectedForecastHours()}`;
 }
 
 async function getForecast(place) {
@@ -566,14 +729,27 @@ async function getForecast(place) {
   url.searchParams.set("longitude", place.longitude);
   url.searchParams.set(
     "hourly",
-    "weather_code,precipitation_probability,precipitation,showers,cape,wind_gusts_10m,freezing_level_height"
+    "weather_code,precipitation_probability,precipitation,showers,cape,wind_gusts_10m,wind_direction_10m,freezing_level_height"
   );
   url.searchParams.set("forecast_hours", String(selectedForecastHours()));
   url.searchParams.set("timezone", "auto");
 
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(preferences.language === "it" ? "Richiesta previsioni non riuscita." : "Forecast request failed.");
-  return response.json();
+  const forecastCache = readJson(storageKeys.forecastCache, {});
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(preferences.language === "it" ? "Richiesta previsioni non riuscita." : "Forecast request failed.");
+    const forecast = await response.json();
+    forecastCache[cacheKey(place)] = { at: Date.now(), forecast };
+    writeJson(storageKeys.forecastCache, forecastCache);
+    return forecast;
+  } catch (error) {
+    const cached = forecastCache[cacheKey(place)];
+    if (cached?.forecast) {
+      setStatus(preferences.language === "it" ? "Uso ultima previsione salvata" : "Using last saved forecast");
+      return cached.forecast;
+    }
+    throw error;
+  }
 }
 
 function selectedLayerConfig() {
@@ -611,6 +787,7 @@ function ensureMap(place) {
     marker.setLatLng([place.latitude, place.longitude]);
     marker.setIcon(cityMarkerIcon(place));
   }
+  renderSavedMarkers();
   requestAnimationFrame(() => map.invalidateSize());
 }
 
@@ -693,6 +870,24 @@ function persistPreferences() {
   writeJson(storageKeys.prefs, preferences);
 }
 
+function applyDetailMode() {
+  document.body.classList.toggle("is-compact", preferences.detailMode === "compact");
+}
+
+function configureAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+  const minutes = Number(preferences.autoRefresh || 0);
+  if (minutes > 0) {
+    autoRefreshTimer = setInterval(() => {
+      if (currentPlace) loadPlace(currentPlace);
+      else refreshSavedComparison();
+    }, minutes * 60 * 1000);
+  }
+}
+
 function renderStaticText() {
   document.querySelector("button[type='submit']").textContent = t("search");
   els.locationLabel.textContent = t("location");
@@ -701,8 +896,14 @@ function renderStaticText() {
   els.thresholdLabel.textContent = t("threshold");
   els.languageLabel.textContent = t("languageLabel");
   els.forecastRangeLabel.textContent = t("forecastRange");
+  els.autoRefreshLabel.textContent = t("autoRefresh");
+  els.detailModeLabel.textContent = t("detailMode");
+  els.detailMode.options[0].textContent = t("detailedMode");
+  els.detailMode.options[1].textContent = t("compactMode");
   els.useLocation.textContent = t("useLocation");
   els.copyReport.textContent = t("copyReport");
+  els.exportReport.textContent = t("exportReport");
+  els.renamePlace.textContent = t("renamePlace");
   els.conditionsTitle.textContent = t("conditions");
   els.hourlyTitle.textContent = t("hourly");
   els.compareTitle.textContent = t("compare");
@@ -728,6 +929,7 @@ function isCurrentSaved() {
 
 function renderSavedPlaces() {
   els.savePlace.textContent = isCurrentSaved() ? t("remove") : t("save");
+  renderSavedMarkers();
   els.savedPlaces.innerHTML = savedPlaces.length
     ? savedPlaces
         .map((place) => {
@@ -765,7 +967,9 @@ function saveCurrentPlace() {
 
 async function refreshSavedComparison() {
   if (!savedPlaces.length) {
+    els.routeSummary.textContent = "";
     els.compareList.innerHTML = `<span class="emptySaved">${t("noSaved")}</span>`;
+    renderSavedMarkers();
     return;
   }
 
@@ -778,7 +982,9 @@ async function refreshSavedComparison() {
     try {
       const forecast = await getForecast(place);
       const rows = getHourlyRows(forecast);
-      const max = rows.reduce((best, row) => (row.score > best.score ? row : best), rows[0]);
+      const visibleRows = selectedRows(rows);
+      const max = visibleRows.reduce((best, row) => (row.score > best.score ? row : best), visibleRows[0] || rows[0]);
+      maybeNotify(place, max);
       updated.push({ ...place, lastScore: max.score, lastTime: max.time, lastTimezone: forecast.timezone });
     } catch {
       updated.push({ ...place, lastScore: null });
@@ -788,6 +994,11 @@ async function refreshSavedComparison() {
   savedPlaces = updated.sort((a, b) => Number(b.lastScore || 0) - Number(a.lastScore || 0));
   writeJson(storageKeys.saved, savedPlaces);
   renderSavedPlaces();
+  const riskiest = savedPlaces.find((place) => Number.isFinite(place.lastScore));
+  els.routeSummary.textContent = riskiest
+    ? `${t("route")}: ${riskiest.name} · ${riskiest.lastScore}`
+    : "";
+  renderSavedMarkers();
   els.compareList.innerHTML = savedPlaces
     .map((place) => {
       const score = Number.isFinite(place.lastScore) ? place.lastScore : "--";
@@ -923,10 +1134,75 @@ async function copyCurrentReport() {
   }
 }
 
+function exportCurrentReport() {
+  const report = buildReport();
+  if (!report) return;
+  const blob = new Blob([report], { type: "text/plain" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `hailwatch-${currentPlace?.name || "report"}.txt`.replace(/\s+/g, "-").toLowerCase();
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+  setStatus(t("exportedReport"));
+}
+
+function renameCurrentSavedPlace() {
+  if (!currentPlace || !isCurrentSaved()) return;
+  const name = window.prompt(preferences.language === "it" ? "Nuovo nome" : "New name", currentPlace.name);
+  if (!name?.trim()) return;
+  const key = placeKey(currentPlace);
+  savedPlaces = savedPlaces.map((place) => (placeKey(place) === key ? { ...place, name: name.trim() } : place));
+  currentPlace = { ...currentPlace, name: name.trim() };
+  writeJson(storageKeys.saved, savedPlaces);
+  writeJson(storageKeys.lastPlace, currentPlace);
+  renderSavedPlaces();
+  renderSavedMarkers();
+  if (marker) marker.setIcon(cityMarkerIcon(currentPlace));
+  els.placeName.textContent = placeLabel(currentPlace);
+}
+
+let suggestionTimer = null;
+function queueSuggestions() {
+  clearTimeout(suggestionTimer);
+  const query = els.cityInput.value.trim();
+  if (query.length < 3) {
+    els.suggestions.innerHTML = "";
+    return;
+  }
+  suggestionTimer = setTimeout(async () => {
+    try {
+      searchSuggestions = await searchCities(query, 5);
+      els.suggestions.innerHTML = searchSuggestions
+        .map(
+          (place, index) => `<button type="button" class="suggestionItem" data-index="${index}">
+            <span>${escapeHtml(place.name)}</span><small>${escapeHtml([place.admin1, place.country].filter(Boolean).join(", "))}</small>
+          </button>`
+        )
+        .join("");
+    } catch {
+      els.suggestions.innerHTML = "";
+    }
+  }, 260);
+}
+
 els.form.addEventListener("submit", (event) => {
   event.preventDefault();
   const city = els.cityInput.value.trim();
+  els.suggestions.innerHTML = "";
   if (city) loadCity(city);
+});
+
+els.cityInput.addEventListener("input", queueSuggestions);
+els.suggestions.addEventListener("click", (event) => {
+  const button = event.target.closest(".suggestionItem");
+  if (!button) return;
+  const place = searchSuggestions[Number(button.dataset.index)];
+  if (!place) return;
+  els.cityInput.value = place.name;
+  els.suggestions.innerHTML = "";
+  loadPlace(place);
 });
 
 els.savedPlaces.addEventListener("click", (event) => {
@@ -952,6 +1228,8 @@ els.compareList.addEventListener("click", (event) => {
 els.savePlace.addEventListener("click", saveCurrentPlace);
 els.useLocation.addEventListener("click", loadCurrentLocation);
 els.copyReport.addEventListener("click", copyCurrentReport);
+els.exportReport.addEventListener("click", exportCurrentReport);
+els.renamePlace.addEventListener("click", renameCurrentSavedPlace);
 els.prevFrame.addEventListener("click", () => showRadarFrame(frameIndex - 1));
 els.nextFrame.addEventListener("click", () => showRadarFrame(frameIndex + 1));
 els.playRadar.addEventListener("click", toggleRadarPlayback);
@@ -973,6 +1251,16 @@ els.forecastHours.addEventListener("change", () => {
   persistPreferences();
   if (currentPlace) loadPlace(currentPlace);
 });
+els.autoRefresh.addEventListener("change", () => {
+  preferences.autoRefresh = Number(els.autoRefresh.value);
+  persistPreferences();
+  configureAutoRefresh();
+});
+els.detailMode.addEventListener("change", () => {
+  preferences.detailMode = els.detailMode.value;
+  persistPreferences();
+  applyDetailMode();
+});
 els.radarOpacity.addEventListener("input", () => {
   preferences.radarOpacity = Number(els.radarOpacity.value);
   persistPreferences();
@@ -986,12 +1274,32 @@ els.mapLayer.addEventListener("change", () => {
 window.addEventListener("resize", () => {
   if (map) map.invalidateSize();
 });
+window.addEventListener("keydown", (event) => {
+  const key = event.key.toLowerCase();
+  if ((event.metaKey || event.ctrlKey) && key === "r") {
+    event.preventDefault();
+    if (currentPlace) loadPlace(currentPlace);
+  }
+  if ((event.metaKey || event.ctrlKey) && key === "l") {
+    event.preventDefault();
+    els.cityInput.focus();
+    els.cityInput.select();
+  }
+  if (event.code === "Space" && !["INPUT", "SELECT", "BUTTON", "TEXTAREA"].includes(event.target.tagName)) {
+    event.preventDefault();
+    toggleRadarPlayback();
+  }
+});
 
 els.riskThreshold.value = String(preferences.riskThreshold);
 els.languageSelect.value = preferences.language;
 els.forecastHours.value = String(selectedForecastHours());
+els.autoRefresh.value = String(Number(preferences.autoRefresh || 0));
+els.detailMode.value = preferences.detailMode === "compact" ? "compact" : "detailed";
 els.radarOpacity.value = String(preferences.radarOpacity);
 els.mapLayer.value = preferences.mapLayer;
+applyDetailMode();
+configureAutoRefresh();
 renderStaticText();
 renderSavedPlaces();
 refreshSavedComparison();

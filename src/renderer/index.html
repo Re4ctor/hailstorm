@@ -34,6 +34,7 @@
             <input id="cityInput" name="city" value="Milan" autocomplete="off" />
             <button type="submit">Cerca</button>
           </div>
+          <div class="suggestions" id="suggestions"></div>
           <div class="savedHead">
             <span id="savedTitle">Salvati</span>
             <button type="button" id="savePlace">Salva</button>
@@ -57,8 +58,23 @@
               <option value="24" selected>24h</option>
               <option value="48">48h</option>
             </select>
+            <label for="autoRefresh" id="autoRefreshLabel">Auto</label>
+            <select id="autoRefresh">
+              <option value="0" selected>Off</option>
+              <option value="10">10m</option>
+              <option value="30">30m</option>
+            </select>
+            <label for="detailMode" id="detailModeLabel">Vista</label>
+            <select id="detailMode">
+              <option value="detailed" selected>Dettaglio</option>
+              <option value="compact">Compatta</option>
+            </select>
           </div>
-          <button type="button" class="wideAction" id="copyReport">Copia report</button>
+          <div class="actionRow">
+            <button type="button" id="copyReport">Copia report</button>
+            <button type="button" id="exportReport">Esporta</button>
+            <button type="button" id="renamePlace">Rinomina</button>
+          </div>
         </form>
 
         <section class="riskPanel" aria-live="polite">
@@ -82,6 +98,8 @@
             </div>
           </div>
           <div class="riskExplain" id="riskExplain"></div>
+          <div class="insightPanel" id="insightPanel"></div>
+          <a class="warningLink" id="warningLink" href="#" target="_blank" rel="noreferrer">Avvisi ufficiali</a>
         </section>
 
         <section class="timeline">
@@ -100,6 +118,7 @@
 
         <section class="compareBlock">
           <div class="sectionTitle" id="compareTitle">Confronto salvati</div>
+          <div class="routeSummary" id="routeSummary"></div>
           <div class="compareList" id="compareList"></div>
         </section>
 
