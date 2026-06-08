@@ -1166,6 +1166,7 @@ h2 {
   }
 
   .shell {
+    --mobile-toolbar-clearance: 258px;
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
     height: 100dvh;
@@ -1246,7 +1247,7 @@ h2 {
   .mobileForecastSheet {
     position: absolute;
     right: 10px;
-    bottom: calc(202px + env(safe-area-inset-bottom));
+    bottom: calc(var(--mobile-toolbar-clearance) + env(safe-area-inset-bottom));
     left: 10px;
     z-index: 710;
     display: grid;
@@ -1453,7 +1454,7 @@ h2 {
 
   .radarLegend {
     right: 10px;
-    bottom: calc(302px + env(safe-area-inset-bottom));
+    bottom: calc(var(--mobile-toolbar-clearance) + 106px + env(safe-area-inset-bottom));
     background: rgb(248 250 248 / 92%);
   }
 
