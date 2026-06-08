@@ -1180,10 +1180,11 @@ h2 {
     gap: 10px;
     min-height: 0;
     overflow: auto;
-    padding-right: 12px;
-    padding-left: 12px;
-    border-right: 1px solid var(--line);
+    padding: calc(44px + env(safe-area-inset-top)) 14px calc(16px + env(safe-area-inset-bottom));
+    border-right: 1px solid rgb(255 255 255 / 14%);
     border-bottom: 0;
+    background: #101318;
+    box-shadow: 18px 0 44px rgb(0 0 0 / 34%);
     transform: translateX(-102%);
     transition: transform 180ms ease;
   }
@@ -1194,6 +1195,8 @@ h2 {
 
   .panel::after {
     width: min(88vw, 360px);
+    height: calc(42px + env(safe-area-inset-top));
+    background: linear-gradient(180deg, rgb(16 19 24 / 94%), rgb(16 19 24 / 72%) 70%, transparent);
   }
 
   .mobileDrawerBackdrop {
@@ -1201,7 +1204,7 @@ h2 {
     inset: 0;
     z-index: 740;
     display: block;
-    background: rgb(0 0 0 / 34%);
+    background: rgb(0 0 0 / 42%);
     opacity: 0;
     pointer-events: none;
     transition: opacity 160ms ease;
@@ -1214,17 +1217,29 @@ h2 {
 
   .mobileSidebarToggle {
     position: absolute;
-    top: 10px;
+    top: calc(10px + env(safe-area-inset-top));
     left: 10px;
     z-index: 720;
-    display: block;
-    min-width: 54px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 62px;
     height: 38px;
-    padding: 0 10px;
-    border-color: rgb(16 20 24 / 12%);
-    background: rgb(248 250 248 / 92%);
+    padding: 0 11px;
+    border-color: rgb(16 20 24 / 14%);
+    background: rgb(248 250 248 / 94%);
     color: #151a1f;
     box-shadow: 0 8px 18px rgb(18 27 34 / 14%);
+  }
+
+  .mobileSidebarToggle::before {
+    content: "";
+    width: 13px;
+    height: 10px;
+    border-top: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    box-shadow: inset 0 4px 0 currentColor;
+    opacity: 0.82;
   }
 
   .brand {
@@ -1315,25 +1330,35 @@ h2 {
   }
 
   .mapTop {
-    top: 10px;
-    left: 74px;
+    top: calc(10px + env(safe-area-inset-top));
+    left: 84px;
     right: 10px;
     min-width: 0;
+    padding: 9px 10px;
   }
 
   .refreshStamp {
-    top: 74px;
+    top: calc(68px + env(safe-area-inset-top));
     left: 10px;
+    background: rgb(248 250 248 / 92%);
   }
 
   .mapToolbar {
     right: 10px;
-    bottom: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
     left: 10px;
     display: grid;
-    grid-template-columns: 38px 1fr 38px;
+    grid-template-columns: 42px 1fr 42px;
     width: auto;
     max-width: none;
+    padding: 8px;
+    background: rgb(248 250 248 / 94%);
+  }
+
+  .mapToolbar button,
+  .mapToolbar select,
+  .opacityControl {
+    height: 38px;
   }
 
   #frameLabel,
@@ -1359,7 +1384,8 @@ h2 {
 
   .radarLegend {
     right: 10px;
-    bottom: 186px;
+    bottom: calc(200px + env(safe-area-inset-bottom));
+    background: rgb(248 250 248 / 92%);
   }
 
   .leaflet-control-zoom {
