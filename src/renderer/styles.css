@@ -50,9 +50,9 @@ select {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   min-height: 0;
-  padding: 52px 16px 14px;
+  padding: 46px 16px 14px;
   overflow: auto;
   background:
     linear-gradient(145deg, rgb(255 255 255 / 10%), transparent 24%),
@@ -478,9 +478,9 @@ h2 {
 }
 
 .timeline {
-  min-height: 0;
+  min-height: 240px;
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 280px;
   flex-direction: column;
   padding-top: 2px;
   overflow: hidden;
