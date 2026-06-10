@@ -144,7 +144,10 @@
           <button id="prevFrame" title="Frame radar precedente">‹</button>
           <button id="playRadar" title="Riproduci animazione radar">Avvia</button>
           <button id="nextFrame" title="Frame radar successivo">›</button>
-          <span id="frameLabel">Caricamento radar</span>
+          <div class="frameControl">
+            <span id="frameLabel">Caricamento radar</span>
+            <input id="frameSlider" type="range" min="0" max="0" value="0" step="1" disabled />
+          </div>
           <button id="refreshForecast" title="Aggiorna previsione">Aggiorna</button>
           <select id="mapLayer" title="Livello mappa">
             <option value="voyager" id="layerMap">Mappa</option>

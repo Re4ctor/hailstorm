@@ -222,6 +222,7 @@ const els = {
   playRadar: document.querySelector("#playRadar"),
   nextFrame: document.querySelector("#nextFrame"),
   frameLabel: document.querySelector("#frameLabel"),
+  frameSlider: document.querySelector("#frameSlider"),
   radarState: document.querySelector("#radarState"),
   savePlace: document.querySelector("#savePlace"),
   savedPlaces: document.querySelector("#savedPlaces"),
@@ -824,6 +825,8 @@ async function loadRadar() {
     tileUrl: `${data.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`
   }));
   frameIndex = Math.max(0, pastFrames.length - 1);
+  els.frameSlider.max = String(Math.max(0, radarFrames.length - 1));
+  els.frameSlider.disabled = radarFrames.length <= 1;
   showRadarFrame(frameIndex);
 }
 
@@ -861,6 +864,8 @@ function showRadarFrame(index) {
     minute: "2-digit"
   }).format(new Date(frame.time * 1000));
   els.frameLabel.textContent = `${frameTime} · ${frameIndex + 1}/${radarFrames.length}`;
+  els.frameSlider.value = String(frameIndex);
+  els.frameSlider.style.setProperty("--frame-progress", `${radarFrames.length > 1 ? (frameIndex / (radarFrames.length - 1)) * 100 : 0}%`);
   els.frameLabel.classList.remove("is-changing");
   requestAnimationFrame(() => els.frameLabel.classList.add("is-changing"));
 }
@@ -1271,6 +1276,10 @@ els.exportReport.addEventListener("click", exportCurrentReport);
 els.renamePlace.addEventListener("click", renameCurrentSavedPlace);
 els.prevFrame.addEventListener("click", () => showRadarFrame(frameIndex - 1));
 els.nextFrame.addEventListener("click", () => showRadarFrame(frameIndex + 1));
+els.frameSlider.addEventListener("input", () => {
+  if (radarTimer) toggleRadarPlayback();
+  showRadarFrame(Number(els.frameSlider.value));
+});
 els.playRadar.addEventListener("click", toggleRadarPlayback);
 els.refreshForecast.addEventListener("click", () => {
   if (currentPlace) loadPlace(currentPlace);
