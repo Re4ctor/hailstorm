@@ -54,6 +54,9 @@ const copy = {
     threshold: "Avviso da",
     languageLabel: "Lingua",
     forecastRange: "Periodo",
+    forecastDay: "Giorno",
+    today: "Oggi",
+    tomorrow: "Domani",
     useLocation: "Posizione",
     currentLocation: "Posizione attuale",
     locating: "Rilevo posizione...",
@@ -132,6 +135,9 @@ const copy = {
     threshold: "Alert from",
     languageLabel: "Language",
     forecastRange: "Range",
+    forecastDay: "Day",
+    today: "Today",
+    tomorrow: "Tomorrow",
     useLocation: "Location",
     currentLocation: "Current location",
     locating: "Detecting location...",
@@ -245,6 +251,8 @@ const els = {
   languageSelect: document.querySelector("#languageSelect"),
   forecastHours: document.querySelector("#forecastHours"),
   forecastRangeLabel: document.querySelector("#forecastRangeLabel"),
+  forecastDay: document.querySelector("#forecastDay"),
+  forecastDayLabel: document.querySelector("#forecastDayLabel"),
   useLocation: document.querySelector("#useLocation"),
   copyReport: document.querySelector("#copyReport"),
   exportReport: document.querySelector("#exportReport"),
@@ -294,6 +302,7 @@ let preferences = {
   riskThreshold: 50,
   radarOpacity: 52,
   forecastHours: 24,
+  forecastDay: 0,
   autoRefresh: 0,
   detailMode: "detailed",
   mapLayer: "voyager",
@@ -552,8 +561,14 @@ function selectedForecastHours() {
   return Number(preferences.forecastHours) === 48 ? 48 : 24;
 }
 
+function selectedForecastDay() {
+  const day = Number(preferences.forecastDay || 0);
+  return Number.isFinite(day) ? Math.max(0, Math.min(6, day)) : 0;
+}
+
 function selectedRows(rows) {
-  return rows.slice(0, Math.min(rows.length, selectedForecastHours()));
+  const start = selectedForecastDay() * 24;
+  return rows.slice(start, Math.min(rows.length, start + selectedForecastHours()));
 }
 
 function stormIntensity(row) {
@@ -742,7 +757,7 @@ async function searchCity(name) {
 }
 
 function cacheKey(place) {
-  return `${placeKey(place)}:${selectedForecastHours()}`;
+  return `${placeKey(place)}:forecast-7d`;
 }
 
 async function getForecast(place) {
@@ -753,7 +768,7 @@ async function getForecast(place) {
     "hourly",
     "weather_code,precipitation_probability,precipitation,showers,cape,wind_gusts_10m,wind_direction_10m,freezing_level_height"
   );
-  url.searchParams.set("forecast_hours", String(selectedForecastHours()));
+  url.searchParams.set("forecast_days", "7");
   url.searchParams.set("timezone", "auto");
 
   const forecastCache = readJson(storageKeys.forecastCache, {});
@@ -961,6 +976,9 @@ function renderStaticText() {
   els.thresholdLabel.textContent = t("threshold");
   els.languageLabel.textContent = t("languageLabel");
   els.forecastRangeLabel.textContent = t("forecastRange");
+  els.forecastDayLabel.textContent = t("forecastDay");
+  els.forecastDay.options[0].textContent = t("today");
+  els.forecastDay.options[1].textContent = t("tomorrow");
   els.autoRefreshLabel.textContent = t("autoRefresh");
   els.detailModeLabel.textContent = t("detailMode");
   els.detailMode.options[0].textContent = t("detailedMode");
@@ -1331,7 +1349,14 @@ els.languageSelect.addEventListener("change", () => {
 els.forecastHours.addEventListener("change", () => {
   preferences.forecastHours = Number(els.forecastHours.value);
   persistPreferences();
-  if (currentPlace) loadPlace(currentPlace);
+  if (currentPlace && currentForecast) renderRisk(currentPlace, currentForecast);
+  refreshSavedComparison();
+});
+els.forecastDay.addEventListener("change", () => {
+  preferences.forecastDay = Number(els.forecastDay.value);
+  persistPreferences();
+  if (currentPlace && currentForecast) renderRisk(currentPlace, currentForecast);
+  refreshSavedComparison();
 });
 els.autoRefresh.addEventListener("change", () => {
   preferences.autoRefresh = Number(els.autoRefresh.value);
@@ -1376,6 +1401,7 @@ window.addEventListener("keydown", (event) => {
 els.riskThreshold.value = String(preferences.riskThreshold);
 els.languageSelect.value = preferences.language;
 els.forecastHours.value = String(selectedForecastHours());
+els.forecastDay.value = String(selectedForecastDay());
 els.autoRefresh.value = String(Number(preferences.autoRefresh || 0));
 els.detailMode.value = preferences.detailMode === "compact" ? "compact" : "detailed";
 els.radarOpacity.value = String(preferences.radarOpacity);
