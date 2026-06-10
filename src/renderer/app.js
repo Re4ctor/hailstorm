@@ -279,6 +279,7 @@ let radarLayer;
 let previousRadarLayer;
 let radarFrames = [];
 let frameIndex = 0;
+let radarNowIndex = 0;
 let radarTimer = null;
 let autoRefreshTimer = null;
 let currentPlace = null;
@@ -824,15 +825,43 @@ async function loadRadar() {
     ...frame,
     tileUrl: `${data.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`
   }));
-  frameIndex = Math.max(0, pastFrames.length - 1);
+  radarNowIndex = Math.max(0, pastFrames.length - 1);
+  frameIndex = radarNowIndex;
   els.frameSlider.max = String(Math.max(0, radarFrames.length - 1));
   els.frameSlider.disabled = radarFrames.length <= 1;
   showRadarFrame(frameIndex);
 }
 
+function clampFrameIndex(index) {
+  const numericIndex = Number(index);
+  if (!Number.isFinite(numericIndex)) return 0;
+  return Math.max(0, Math.min(numericIndex, Math.max(0, radarFrames.length - 1)));
+}
+
+function formatRadarFrameLabel(frame) {
+  const locale = preferences.language === "it" ? "it-IT" : "en-US";
+  const date = new Date(frame.time * 1000);
+  const time = new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+  let phase;
+  if (frameIndex > radarNowIndex) phase = preferences.language === "it" ? "previsione" : "forecast";
+  else if (frameIndex === radarNowIndex) phase = preferences.language === "it" ? "ora" : "now";
+  else phase = preferences.language === "it" ? "storico" : "past";
+  return `${time} · ${phase} · ${frameIndex + 1}/${radarFrames.length}`;
+}
+
+function updateFrameControls() {
+  els.prevFrame.disabled = frameIndex <= 0;
+  els.nextFrame.disabled = frameIndex >= radarFrames.length - 1;
+}
+
 function showRadarFrame(index) {
   if (!map || !radarFrames.length) return;
-  frameIndex = (index + radarFrames.length) % radarFrames.length;
+  frameIndex = clampFrameIndex(index);
   const frame = radarFrames[frameIndex];
 
   previousRadarLayer = radarLayer;
@@ -859,13 +888,10 @@ function showRadarFrame(index) {
     }
   });
 
-  const frameTime = new Intl.DateTimeFormat(preferences.language === "it" ? "it-IT" : "en-US", {
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(frame.time * 1000));
-  els.frameLabel.textContent = `${frameTime} · ${frameIndex + 1}/${radarFrames.length}`;
+  els.frameLabel.textContent = formatRadarFrameLabel(frame);
   els.frameSlider.value = String(frameIndex);
   els.frameSlider.style.setProperty("--frame-progress", `${radarFrames.length > 1 ? (frameIndex / (radarFrames.length - 1)) * 100 : 0}%`);
+  updateFrameControls();
   els.frameLabel.classList.remove("is-changing");
   requestAnimationFrame(() => els.frameLabel.classList.add("is-changing"));
 }
@@ -878,8 +904,16 @@ function toggleRadarPlayback() {
     return;
   }
 
+  if (frameIndex >= radarFrames.length - 1) return;
+
   els.playRadar.textContent = t("pause");
-  radarTimer = setInterval(() => showRadarFrame(frameIndex + 1), 1050);
+  radarTimer = setInterval(() => {
+    if (frameIndex >= radarFrames.length - 1) {
+      toggleRadarPlayback();
+      return;
+    }
+    showRadarFrame(frameIndex + 1);
+  }, 1050);
 }
 
 function updateLastUpdated() {
