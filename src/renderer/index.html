@@ -115,7 +115,11 @@
         <section class="timeline">
           <div class="timelineHead">
             <div class="sectionTitle" id="hourlyTitle">Rischio orario</div>
-            <span id="hourRange">24 ore</span>
+            <div class="forecastWindowControl">
+              <button type="button" id="prevForecastWindow" title="Ore precedenti">‹</button>
+              <span id="hourRange">24 ore</span>
+              <button type="button" id="nextForecastWindow" title="Ore successive">›</button>
+            </div>
           </div>
           <div class="severeWindow" id="severeWindow">Finestra severa non disponibile</div>
           <div class="hours" id="hours"></div>

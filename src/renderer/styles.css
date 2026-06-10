@@ -591,10 +591,29 @@ h2 {
 
 .timelineHead {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
+}
+
+.forecastWindowControl {
+  display: inline-grid;
+  grid-template-columns: 24px minmax(86px, auto) 24px;
+  align-items: center;
+  gap: 4px;
+}
+
+.forecastWindowControl button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--muted-2);
+}
+
+.forecastWindowControl button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .severeWindow {
@@ -1441,6 +1460,15 @@ h2 {
 
   .timeline {
     min-height: 220px;
+  }
+
+  .forecastWindowControl {
+    grid-template-columns: 28px minmax(78px, auto) 28px;
+  }
+
+  .forecastWindowControl button {
+    width: 28px;
+    height: 28px;
   }
 
   .hours {

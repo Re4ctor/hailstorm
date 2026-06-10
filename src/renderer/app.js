@@ -251,6 +251,8 @@ const els = {
   languageSelect: document.querySelector("#languageSelect"),
   forecastHours: document.querySelector("#forecastHours"),
   forecastRangeLabel: document.querySelector("#forecastRangeLabel"),
+  prevForecastWindow: document.querySelector("#prevForecastWindow"),
+  nextForecastWindow: document.querySelector("#nextForecastWindow"),
   forecastDay: document.querySelector("#forecastDay"),
   forecastDayLabel: document.querySelector("#forecastDayLabel"),
   useLocation: document.querySelector("#useLocation"),
@@ -303,6 +305,7 @@ let preferences = {
   radarOpacity: 52,
   forecastHours: 24,
   forecastDay: 0,
+  forecastOffsetHours: 0,
   autoRefresh: 0,
   detailMode: "detailed",
   mapLayer: "voyager",
@@ -561,14 +564,29 @@ function selectedForecastHours() {
   return Number(preferences.forecastHours) === 48 ? 48 : 24;
 }
 
+function selectedForecastOffsetHours() {
+  const offset = Number(preferences.forecastOffsetHours ?? preferences.forecastDay * 24 ?? 0);
+  return Number.isFinite(offset) ? Math.max(0, Math.min(144, offset)) : 0;
+}
+
 function selectedForecastDay() {
-  const day = Number(preferences.forecastDay || 0);
-  return Number.isFinite(day) ? Math.max(0, Math.min(6, day)) : 0;
+  return Math.floor(selectedForecastOffsetHours() / 24);
+}
+
+function maxForecastOffset(rows) {
+  return Math.min(144, Math.max(0, (rows?.length || 168) - selectedForecastHours()));
 }
 
 function selectedRows(rows) {
-  const start = selectedForecastDay() * 24;
+  const start = Math.min(selectedForecastOffsetHours(), maxForecastOffset(rows));
   return rows.slice(start, Math.min(rows.length, start + selectedForecastHours()));
+}
+
+function updateForecastWindowControls(rows) {
+  const offset = selectedForecastOffsetHours();
+  const maxOffset = maxForecastOffset(rows);
+  els.prevForecastWindow.disabled = offset <= 0;
+  els.nextForecastWindow.disabled = offset >= maxOffset;
 }
 
 function stormIntensity(row) {
@@ -671,6 +689,7 @@ function renderRisk(place, forecast) {
   els.scoreRing.style.setProperty("--risk-color", color);
   const severeWindow = findSevereWindow(rows, forecast.timezone);
   els.hourRange.textContent = formatRangeLabel(rows, forecast.timezone);
+  updateForecastWindowControls(rows);
   els.severeWindow.textContent = severeWindow || t("noRisk");
   els.severeWindow.classList.toggle("is-active", Boolean(severeWindow));
 
@@ -1346,6 +1365,22 @@ els.languageSelect.addEventListener("change", () => {
   persistPreferences();
   rerenderCurrent();
 });
+function setForecastOffset(offset) {
+  const rows = currentForecast ? getHourlyRows(currentForecast) : null;
+  preferences.forecastOffsetHours = Math.max(0, Math.min(maxForecastOffset(rows), Number(offset) || 0));
+  preferences.forecastDay = selectedForecastDay();
+  els.forecastDay.value = String(selectedForecastDay());
+  persistPreferences();
+  if (currentPlace && currentForecast) renderRisk(currentPlace, currentForecast);
+  refreshSavedComparison();
+}
+
+els.prevForecastWindow.addEventListener("click", () => {
+  setForecastOffset(selectedForecastOffsetHours() - selectedForecastHours());
+});
+els.nextForecastWindow.addEventListener("click", () => {
+  setForecastOffset(selectedForecastOffsetHours() + selectedForecastHours());
+});
 els.forecastHours.addEventListener("change", () => {
   preferences.forecastHours = Number(els.forecastHours.value);
   persistPreferences();
@@ -1353,10 +1388,7 @@ els.forecastHours.addEventListener("change", () => {
   refreshSavedComparison();
 });
 els.forecastDay.addEventListener("change", () => {
-  preferences.forecastDay = Number(els.forecastDay.value);
-  persistPreferences();
-  if (currentPlace && currentForecast) renderRisk(currentPlace, currentForecast);
-  refreshSavedComparison();
+  setForecastOffset(Number(els.forecastDay.value) * 24);
 });
 els.autoRefresh.addEventListener("change", () => {
   preferences.autoRefresh = Number(els.autoRefresh.value);
