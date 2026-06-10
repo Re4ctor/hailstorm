@@ -835,6 +835,10 @@ h2 {
   color: #151a1f;
 }
 
+#nextHoursRadar {
+  min-width: 104px;
+}
+
 .mapToolbar select {
   height: 34px;
   border-color: rgb(16 20 24 / 10%);
@@ -1554,6 +1558,11 @@ h2 {
   .forecastTimeControl {
     min-width: 0;
     padding: 4px 6px;
+  }
+
+  #nextHoursRadar {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   #frameLabel,

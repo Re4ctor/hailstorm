@@ -98,6 +98,7 @@ const copy = {
     refresh: "Aggiorna",
     play: "Avvia",
     pause: "Pausa",
+    nextHoursRadar: "Prossime ore",
     mapLayerTitle: "Livello mappa",
     legendLabel: "Legenda intensità radar",
     looking: "Cerco",
@@ -181,6 +182,7 @@ const copy = {
     refresh: "Refresh",
     play: "Play",
     pause: "Pause",
+    nextHoursRadar: "Next hours",
     mapLayerTitle: "Map layer",
     legendLabel: "Radar intensity legend",
     looking: "Searching",
@@ -231,6 +233,7 @@ const els = {
   prevFrame: document.querySelector("#prevFrame"),
   playRadar: document.querySelector("#playRadar"),
   nextFrame: document.querySelector("#nextFrame"),
+  nextHoursRadar: document.querySelector("#nextHoursRadar"),
   frameLabel: document.querySelector("#frameLabel"),
   frameSlider: document.querySelector("#frameSlider"),
   forecastTimeLabel: document.querySelector("#forecastTimeLabel"),
@@ -912,6 +915,7 @@ function formatRadarFrameLabel(frame) {
 function updateFrameControls() {
   els.prevFrame.disabled = frameIndex <= 0;
   els.nextFrame.disabled = frameIndex >= radarFrames.length - 1;
+  els.nextHoursRadar.disabled = radarNowIndex >= radarFrames.length - 1 || frameIndex >= radarFrames.length - 1;
 }
 
 function showRadarFrame(index) {
@@ -949,6 +953,13 @@ function showRadarFrame(index) {
   updateFrameControls();
   els.frameLabel.classList.remove("is-changing");
   requestAnimationFrame(() => els.frameLabel.classList.add("is-changing"));
+}
+
+function showNextRadarHours() {
+  if (!radarFrames.length || radarNowIndex >= radarFrames.length - 1) return;
+  if (radarTimer) toggleRadarPlayback();
+  const firstFutureIndex = radarNowIndex + 1;
+  showRadarFrame(frameIndex < firstFutureIndex ? firstFutureIndex : frameIndex + 1);
 }
 
 function toggleRadarPlayback() {
@@ -1039,6 +1050,7 @@ function renderStaticText() {
   els.legendWeak.textContent = t("weak");
   els.legendStrong.textContent = t("strong");
   els.refreshForecast.textContent = t("refresh");
+  els.nextHoursRadar.textContent = t("nextHoursRadar");
   els.mobileSidebarToggle.textContent = document.querySelector(".shell").classList.contains("is-sidebar-open") ? t("sidebarClose") : t("sidebarOpen");
   els.playRadar.textContent = radarTimer ? t("pause") : t("play");
   els.mapLayer.setAttribute("title", t("mapLayerTitle"));
@@ -1368,6 +1380,7 @@ els.exportReport.addEventListener("click", exportCurrentReport);
 els.renamePlace.addEventListener("click", renameCurrentSavedPlace);
 els.prevFrame.addEventListener("click", () => showRadarFrame(frameIndex - 1));
 els.nextFrame.addEventListener("click", () => showRadarFrame(frameIndex + 1));
+els.nextHoursRadar.addEventListener("click", showNextRadarHours);
 els.frameSlider.addEventListener("input", () => {
   if (radarTimer) toggleRadarPlayback();
   showRadarFrame(Number(els.frameSlider.value));
