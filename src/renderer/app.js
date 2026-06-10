@@ -55,6 +55,8 @@ const copy = {
     languageLabel: "Lingua",
     forecastRange: "Periodo",
     forecastDay: "Giorno",
+    forecastTime: "Previsione",
+    currentHour: "ora corrente",
     today: "Oggi",
     tomorrow: "Domani",
     useLocation: "Posizione",
@@ -136,6 +138,8 @@ const copy = {
     languageLabel: "Language",
     forecastRange: "Range",
     forecastDay: "Day",
+    forecastTime: "Forecast",
+    currentHour: "current hour",
     today: "Today",
     tomorrow: "Tomorrow",
     useLocation: "Location",
@@ -229,6 +233,8 @@ const els = {
   nextFrame: document.querySelector("#nextFrame"),
   frameLabel: document.querySelector("#frameLabel"),
   frameSlider: document.querySelector("#frameSlider"),
+  forecastTimeLabel: document.querySelector("#forecastTimeLabel"),
+  forecastTimeSlider: document.querySelector("#forecastTimeSlider"),
   radarState: document.querySelector("#radarState"),
   savePlace: document.querySelector("#savePlace"),
   savedPlaces: document.querySelector("#savedPlaces"),
@@ -587,6 +593,20 @@ function updateForecastWindowControls(rows) {
   const maxOffset = maxForecastOffset(rows);
   els.prevForecastWindow.disabled = offset <= 0;
   els.nextForecastWindow.disabled = offset >= maxOffset;
+  els.forecastTimeSlider.max = String(maxOffset);
+  els.forecastTimeSlider.value = String(offset);
+  els.forecastTimeSlider.style.setProperty("--forecast-progress", `${maxOffset > 0 ? (offset / maxOffset) * 100 : 0}%`);
+}
+
+function updateForecastTimeLabel(rows, timezone) {
+  const visibleRows = selectedRows(rows);
+  const first = visibleRows[0];
+  if (!first) {
+    els.forecastTimeLabel.textContent = `${t("forecastTime")}: --`;
+    return;
+  }
+  const when = selectedForecastOffsetHours() === 0 ? t("currentHour") : formatDateTime(first.time, timezone);
+  els.forecastTimeLabel.textContent = `${t("forecastTime")}: ${when}`;
 }
 
 function stormIntensity(row) {
@@ -690,6 +710,7 @@ function renderRisk(place, forecast) {
   const severeWindow = findSevereWindow(rows, forecast.timezone);
   els.hourRange.textContent = formatRangeLabel(rows, forecast.timezone);
   updateForecastWindowControls(rows);
+  updateForecastTimeLabel(rows, forecast.timezone);
   els.severeWindow.textContent = severeWindow || t("noRisk");
   els.severeWindow.classList.toggle("is-active", Boolean(severeWindow));
 
@@ -1389,6 +1410,9 @@ els.forecastHours.addEventListener("change", () => {
 });
 els.forecastDay.addEventListener("change", () => {
   setForecastOffset(Number(els.forecastDay.value) * 24);
+});
+els.forecastTimeSlider.addEventListener("input", () => {
+  setForecastOffset(Number(els.forecastTimeSlider.value));
 });
 els.autoRefresh.addEventListener("change", () => {
   preferences.autoRefresh = Number(els.autoRefresh.value);
