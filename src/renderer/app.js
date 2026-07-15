@@ -55,8 +55,6 @@ const copy = {
     languageLabel: "Lingua",
     forecastRange: "Periodo",
     forecastDay: "Giorno",
-    forecastTime: "Previsione",
-    currentHour: "ora corrente",
     today: "Oggi",
     tomorrow: "Domani",
     useLocation: "Posizione",
@@ -96,9 +94,6 @@ const copy = {
     updated: "Aggiornato",
     loadingRadar: "Caricamento radar",
     refresh: "Aggiorna",
-    play: "Avvia",
-    pause: "Pausa",
-    nextHoursRadar: "Prossime ore",
     mapLayerTitle: "Livello mappa",
     legendLabel: "Legenda intensità radar",
     looking: "Cerco",
@@ -140,8 +135,6 @@ const copy = {
     languageLabel: "Language",
     forecastRange: "Range",
     forecastDay: "Day",
-    forecastTime: "Forecast",
-    currentHour: "current hour",
     today: "Today",
     tomorrow: "Tomorrow",
     useLocation: "Location",
@@ -181,9 +174,6 @@ const copy = {
     updated: "Updated",
     loadingRadar: "Loading radar",
     refresh: "Refresh",
-    play: "Play",
-    pause: "Pause",
-    nextHoursRadar: "Next hours",
     mapLayerTitle: "Map layer",
     legendLabel: "Radar intensity legend",
     looking: "Searching",
@@ -232,14 +222,8 @@ const els = {
   hours: document.querySelector("#hours"),
   hourRange: document.querySelector("#hourRange"),
   severeWindow: document.querySelector("#severeWindow"),
-  prevFrame: document.querySelector("#prevFrame"),
-  playRadar: document.querySelector("#playRadar"),
-  nextFrame: document.querySelector("#nextFrame"),
-  nextHoursRadar: document.querySelector("#nextHoursRadar"),
   frameLabel: document.querySelector("#frameLabel"),
   frameSlider: document.querySelector("#frameSlider"),
-  forecastTimeLabel: document.querySelector("#forecastTimeLabel"),
-  forecastTimeSlider: document.querySelector("#forecastTimeSlider"),
   radarState: document.querySelector("#radarState"),
   savePlace: document.querySelector("#savePlace"),
   savedPlaces: document.querySelector("#savedPlaces"),
@@ -300,8 +284,6 @@ let radarLayer;
 const radarLayers = new Set();
 let radarFrames = [];
 let frameIndex = 0;
-let radarNowIndex = 0;
-let radarTimer = null;
 let autoRefreshTimer = null;
 let currentPlace = null;
 let currentForecast = null;
@@ -606,24 +588,9 @@ function updateForecastWindowControls(rows) {
   els.forecastDay.value = String(preferences.forecastDay);
   els.prevForecastWindow.disabled = offset <= 0;
   els.nextForecastWindow.disabled = offset >= maxOffset;
-  els.forecastTimeSlider.disabled = !rows?.length;
-  els.forecastTimeSlider.max = String(maxOffset);
-  els.forecastTimeSlider.value = String(offset);
-  els.forecastTimeSlider.style.setProperty("--forecast-progress", `${maxOffset > 0 ? (offset / maxOffset) * 100 : 0}%`);
   [...els.forecastDay.options].forEach((option) => {
     option.disabled = Number(option.value) * 24 > maxOffset;
   });
-}
-
-function updateForecastTimeLabel(rows, timezone) {
-  const visibleRows = selectedRows(rows);
-  const first = visibleRows[0];
-  if (!first) {
-    els.forecastTimeLabel.textContent = `${t("forecastTime")}: --`;
-    return;
-  }
-  const when = selectedForecastOffsetHours() === 0 ? t("currentHour") : formatDateTime(first.time, timezone);
-  els.forecastTimeLabel.textContent = `${t("forecastTime")}: ${when}`;
 }
 
 function stormIntensity(row) {
@@ -727,7 +694,6 @@ function renderRisk(place, forecast) {
   const severeWindow = findSevereWindow(rows, forecast.timezone);
   els.hourRange.textContent = formatRangeLabel(rows, forecast.timezone);
   updateForecastWindowControls(rows);
-  updateForecastTimeLabel(rows, forecast.timezone);
   els.severeWindow.textContent = severeWindow || t("noRisk");
   els.severeWindow.classList.toggle("is-active", Boolean(severeWindow));
 
@@ -941,19 +907,18 @@ async function loadRadar() {
   if (!response.ok) throw new Error(preferences.language === "it" ? "Dati radar non disponibili." : "Radar data unavailable.");
   const data = await response.json();
   if (generation !== radarLoadGeneration) return;
-  if (radarTimer) toggleRadarPlayback();
   const pastFrames = data.radar?.past || [];
   const providerFrames = data.radar?.nowcast || [];
   const latestPastFrame = pastFrames.at(-1);
   const futureFrames = providerFrames.length ? providerFrames : forecastRadarFrames(latestPastFrame);
-  const frames = [...pastFrames, ...futureFrames];
-  els.radarState.textContent = providerFrames.length ? "Live" : futureFrames.length ? t("radarForecast") : preferences.language === "it" ? "Storico" : "History";
+  const frames = latestPastFrame ? [latestPastFrame, ...futureFrames] : [];
+  els.radarState.textContent = providerFrames.length ? "Live" : futureFrames.length ? t("radarForecast") : preferences.language === "it" ? "Non disponibile" : "Unavailable";
   radarFrames = frames.map((frame) => ({
     ...frame,
     tileUrl: `${data.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`
   }));
-  radarNowIndex = Math.max(0, pastFrames.length - 1);
-  frameIndex = radarNowIndex;
+  frameIndex = 0;
+  els.frameSlider.min = "0";
   els.frameSlider.max = String(Math.max(0, radarFrames.length - 1));
   els.frameSlider.disabled = radarFrames.length <= 1;
   showRadarFrame(frameIndex);
@@ -967,25 +932,15 @@ function clampFrameIndex(index) {
 
 function formatRadarFrameLabel(frame) {
   const locale = preferences.language === "it" ? "it-IT" : "en-US";
-  const date = new Date(frame.time * 1000);
   const time = new Intl.DateTimeFormat(locale, {
-    day: "2-digit",
-    month: "short",
     hour: "2-digit",
     minute: "2-digit"
-  }).format(date);
-  let phase;
-  if (frame.forecast) phase = t("radarForecast");
-  else if (frameIndex > radarNowIndex) phase = preferences.language === "it" ? "previsione" : "forecast";
-  else if (frameIndex === radarNowIndex) phase = preferences.language === "it" ? "ora" : "now";
-  else phase = preferences.language === "it" ? "storico" : "past";
-  return `${time} · ${phase} · ${frameIndex + 1}/${radarFrames.length}`;
-}
-
-function updateFrameControls() {
-  els.prevFrame.disabled = frameIndex <= 0;
-  els.nextFrame.disabled = frameIndex >= radarFrames.length - 1;
-  els.nextHoursRadar.disabled = radarNowIndex >= radarFrames.length - 1 || frameIndex >= radarFrames.length - 1;
+  }).format(new Date(frame.time * 1000));
+  const minutes = Math.max(0, Math.round((frame.time - radarFrames[0].time) / 60));
+  const offset = minutes === 0
+    ? preferences.language === "it" ? "Ora" : "Now"
+    : minutes % 60 === 0 ? `+${minutes / 60}h` : `+${minutes} min`;
+  return `${offset} · ${time}`;
 }
 
 function showRadarFrame(index) {
@@ -1014,37 +969,8 @@ function showRadarFrame(index) {
   els.frameLabel.textContent = formatRadarFrameLabel(frame);
   els.frameSlider.value = String(frameIndex);
   els.frameSlider.style.setProperty("--frame-progress", `${radarFrames.length > 1 ? (frameIndex / (radarFrames.length - 1)) * 100 : 0}%`);
-  updateFrameControls();
   els.frameLabel.classList.remove("is-changing");
   requestAnimationFrame(() => els.frameLabel.classList.add("is-changing"));
-}
-
-function showNextRadarHours() {
-  if (!radarFrames.length || radarNowIndex >= radarFrames.length - 1) return;
-  if (radarTimer) toggleRadarPlayback();
-  const firstFutureIndex = radarNowIndex + 1;
-  showRadarFrame(frameIndex < firstFutureIndex ? firstFutureIndex : frameIndex + 1);
-}
-
-function toggleRadarPlayback() {
-  if (radarTimer) {
-    clearInterval(radarTimer);
-    radarTimer = null;
-    els.playRadar.textContent = t("play");
-    return;
-  }
-
-  if (!radarFrames.length) return;
-  if (frameIndex >= radarFrames.length - 1) showRadarFrame(0);
-
-  els.playRadar.textContent = t("pause");
-  radarTimer = setInterval(() => {
-    if (frameIndex >= radarFrames.length - 1) {
-      toggleRadarPlayback();
-      return;
-    }
-    showRadarFrame(frameIndex + 1);
-  }, 1050);
 }
 
 function updateLastUpdated() {
@@ -1115,9 +1041,7 @@ function renderStaticText() {
   els.legendWeak.textContent = t("weak");
   els.legendStrong.textContent = t("strong");
   els.refreshForecast.textContent = t("refresh");
-  els.nextHoursRadar.textContent = t("nextHoursRadar");
   els.mobileSidebarToggle.textContent = document.querySelector(".shell").classList.contains("is-sidebar-open") ? t("sidebarClose") : t("sidebarOpen");
-  els.playRadar.textContent = radarTimer ? t("pause") : t("play");
   els.mapLayer.setAttribute("title", t("mapLayerTitle"));
   document.querySelector(".radarLegend").setAttribute("aria-label", t("legendLabel"));
   if (!radarFrames.length) els.frameLabel.textContent = t("loadingRadar");
@@ -1469,20 +1393,9 @@ els.mobileForecastSheet.addEventListener("click", () => {
 els.copyReport.addEventListener("click", copyCurrentReport);
 els.exportReport.addEventListener("click", exportCurrentReport);
 els.renamePlace.addEventListener("click", renameCurrentSavedPlace);
-els.prevFrame.addEventListener("click", () => {
-  if (radarTimer) toggleRadarPlayback();
-  showRadarFrame(frameIndex - 1);
-});
-els.nextFrame.addEventListener("click", () => {
-  if (radarTimer) toggleRadarPlayback();
-  showRadarFrame(frameIndex + 1);
-});
-els.nextHoursRadar.addEventListener("click", showNextRadarHours);
 els.frameSlider.addEventListener("input", () => {
-  if (radarTimer) toggleRadarPlayback();
   showRadarFrame(Number(els.frameSlider.value));
 });
-els.playRadar.addEventListener("click", toggleRadarPlayback);
 els.refreshForecast.addEventListener("click", () => {
   if (currentPlace) loadPlace(currentPlace);
 });
@@ -1519,12 +1432,6 @@ els.forecastHours.addEventListener("change", () => {
 els.forecastDay.addEventListener("change", () => {
   setForecastOffset(Number(els.forecastDay.value) * 24);
 });
-els.forecastTimeSlider.addEventListener("input", () => {
-  setForecastOffset(Number(els.forecastTimeSlider.value), false);
-});
-els.forecastTimeSlider.addEventListener("change", () => {
-  setForecastOffset(Number(els.forecastTimeSlider.value));
-});
 els.autoRefresh.addEventListener("change", () => {
   preferences.autoRefresh = Number(els.autoRefresh.value);
   persistPreferences();
@@ -1558,10 +1465,6 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     els.cityInput.focus();
     els.cityInput.select();
-  }
-  if (event.code === "Space" && !["INPUT", "SELECT", "BUTTON", "TEXTAREA"].includes(event.target.tagName)) {
-    event.preventDefault();
-    toggleRadarPlayback();
   }
 });
 
