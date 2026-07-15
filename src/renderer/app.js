@@ -1,7 +1,6 @@
 const geocodeUrl = "https://geocoding-api.open-meteo.com/v1/search";
 const forecastUrl = "https://api.open-meteo.com/v1/forecast";
-const rainViewerUrl = "https://api.rainviewer.com/public/weather-maps.json";
-const radarMaxNativeZoom = 7;
+const precipitationMapUrl = "https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json";
 const mapStartZoom = 7;
 const storageKeys = {
   saved: "hailWatch.savedPlaces",
@@ -80,8 +79,8 @@ const copy = {
     conditions: "Condizioni",
     hourly: "Rischio orario",
     compare: "Confronto salvati",
-    radarTitle: "Radar live",
-    radarSubtitle: "Traccia temporali",
+    radarTitle: "Previsione precipitazioni",
+    radarSubtitle: "Prossime 2 ore",
     layerMap: "Mappa",
     layerDark: "Scura",
     layerTerrain: "Terreno",
@@ -92,14 +91,14 @@ const copy = {
     severe: "Finestra severa",
     updatedNever: "Mai aggiornato",
     updated: "Aggiornato",
-    loadingRadar: "Caricamento radar",
+    loadingRadar: "Caricamento previsione",
     refresh: "Aggiorna",
     mapLayerTitle: "Livello mappa",
-    legendLabel: "Legenda intensità radar",
+    legendLabel: "Legenda intensità precipitazioni",
     looking: "Cerco",
     forecast: "Carico previsione...",
-    radar: "Aggiorno radar...",
-    radarForecast: "previsione movimento",
+    radar: "Aggiorno mappa previsionale...",
+    radarForecast: "Previsione",
     synced: "Sincronizzato",
     minimum: "Minimo",
     low: "Basso",
@@ -160,8 +159,8 @@ const copy = {
     conditions: "Conditions",
     hourly: "Hourly risk",
     compare: "Saved comparison",
-    radarTitle: "Live radar",
-    radarSubtitle: "Track storms",
+    radarTitle: "Precipitation forecast",
+    radarSubtitle: "Next 2 hours",
     layerMap: "Map",
     layerDark: "Dark",
     layerTerrain: "Terrain",
@@ -172,14 +171,14 @@ const copy = {
     severe: "Severe window",
     updatedNever: "Never updated",
     updated: "Updated",
-    loadingRadar: "Loading radar",
+    loadingRadar: "Loading forecast",
     refresh: "Refresh",
     mapLayerTitle: "Map layer",
-    legendLabel: "Radar intensity legend",
+    legendLabel: "Precipitation intensity legend",
     looking: "Searching",
     forecast: "Loading forecast...",
-    radar: "Updating radar...",
-    radarForecast: "motion forecast",
+    radar: "Updating forecast map...",
+    radarForecast: "Forecast",
     synced: "Synced",
     minimum: "Minimal",
     low: "Low",
@@ -280,6 +279,7 @@ const els = {
 let map;
 let marker;
 let baseLayer;
+let weatherMapAdapter;
 let radarLayer;
 const radarLayers = new Set();
 let radarFrames = [];
@@ -787,7 +787,7 @@ async function getForecast(place) {
   url.searchParams.set("longitude", place.longitude);
   url.searchParams.set(
     "hourly",
-    "weather_code,precipitation_probability,precipitation,showers,cape,wind_speed_10m,wind_gusts_10m,wind_direction_10m,freezing_level_height"
+    "weather_code,precipitation_probability,precipitation,showers,cape,wind_gusts_10m,wind_direction_10m,freezing_level_height"
   );
   url.searchParams.set("forecast_hours", "168");
   url.searchParams.set("timeformat", "unixtime");
@@ -824,6 +824,17 @@ function setBaseLayer() {
   baseLayer = L.tileLayer(config.url, config.options).addTo(map);
 }
 
+function updateWeatherMapBounds() {
+  if (!map || !window.OMWeatherMapLayer) return;
+  const bounds = map.getBounds();
+  window.OMWeatherMapLayer.updateCurrentBounds([
+    bounds.getWest(),
+    bounds.getSouth(),
+    bounds.getEast(),
+    bounds.getNorth()
+  ]);
+}
+
 function ensureMap(place) {
   if (!map) {
     map = L.map("map", {
@@ -835,6 +846,12 @@ function ensureMap(place) {
     window.map = map;
     L.control.zoom({ position: "topright" }).addTo(map);
     setBaseLayer();
+    if (window.OMWeatherMapLayer) {
+      weatherMapAdapter = window.OMWeatherMapLayer.addLeafletProtocolSupport(L);
+      weatherMapAdapter.addProtocol("om", window.OMWeatherMapLayer.omProtocol);
+      map.on("moveend", updateWeatherMapBounds);
+      updateWeatherMapBounds();
+    }
   } else {
     map.setView([place.latitude, place.longitude], mapStartZoom);
   }
@@ -852,71 +869,31 @@ function ensureMap(place) {
   requestAnimationFrame(() => map.invalidateSize());
 }
 
-function forecastRadarFrames(latestFrame) {
-  const rows = currentForecast ? getHourlyRows(currentForecast) : [];
-  if (!latestFrame || !rows.length) return [];
-
-  let eastKm = 0;
-  let northKm = 0;
-  return Array.from({ length: 12 }, (_, index) => {
-    const wind = rows[Math.floor(index / 6)] || rows.at(-1);
-    const speed = Math.max(0, Number(wind.wind_speed_10m) || 0);
-    const direction = Number(wind.wind_direction_10m);
-    const bearing = (Number.isFinite(direction) ? direction + 180 : 0) * Math.PI / 180;
-    eastKm += Math.sin(bearing) * speed / 6;
-    northKm += Math.cos(bearing) * speed / 6;
-    return {
-      ...latestFrame,
-      time: latestFrame.time + (index + 1) * 600,
-      forecast: true,
-      displacementKm: Math.hypot(eastKm, northKm),
-      movementBearing: (Math.atan2(eastKm, northKm) * 180 / Math.PI + 360) % 360
-    };
-  });
-}
-
 function createRadarLayer(frame) {
-  const options = {
-    tileSize: 256,
+  if (!weatherMapAdapter) throw new Error(preferences.language === "it" ? "Livello previsionale non disponibile." : "Forecast layer unavailable.");
+  return weatherMapAdapter.createTileLayer(frame.url, {
     opacity: 0,
-    zIndex: 10,
-    maxZoom: 16,
-    maxNativeZoom: radarMaxNativeZoom,
-    keepBuffer: frame.forecast ? 1 : 0,
-    attribution: "Radar &copy; RainViewer"
-  };
-  if (!frame.forecast) return L.tileLayer(frame.tileUrl, options);
-
-  const layer = L.tileLayer(frame.tileUrl, options);
-  layer.createTile = function createTile(coords, done) {
-    const tile = L.TileLayer.prototype.createTile.call(this, coords, done);
-    const latitude = this._map.getCenter().lat * Math.PI / 180;
-    const pixelsPerKm = (256 * 2 ** coords.z) / (40075.017 * Math.cos(latitude));
-    const bearing = frame.movementBearing * Math.PI / 180;
-    const distance = frame.displacementKm * pixelsPerKm;
-    tile.style.marginLeft = `${Math.sin(bearing) * distance}px`;
-    tile.style.marginTop = `${-Math.cos(bearing) * distance}px`;
-    return tile;
-  };
-  return layer;
+    maxZoom: 12,
+    attribution: "Forecast &copy; Open-Meteo, DWD"
+  });
 }
 
 async function loadRadar() {
   const generation = ++radarLoadGeneration;
-  const response = await fetch(rainViewerUrl);
-  if (!response.ok) throw new Error(preferences.language === "it" ? "Dati radar non disponibili." : "Radar data unavailable.");
-  const data = await response.json();
+  const response = await fetch(precipitationMapUrl);
+  if (!response.ok) throw new Error(preferences.language === "it" ? "Previsione mappa non disponibile." : "Map forecast unavailable.");
+  const metadata = await response.json();
   if (generation !== radarLoadGeneration) return;
-  const pastFrames = data.radar?.past || [];
-  const providerFrames = data.radar?.nowcast || [];
-  const latestPastFrame = pastFrames.at(-1);
-  const futureFrames = providerFrames.length ? providerFrames : forecastRadarFrames(latestPastFrame);
-  const frames = latestPastFrame ? [latestPastFrame, ...futureFrames] : [];
-  els.radarState.textContent = providerFrames.length ? "Live" : futureFrames.length ? t("radarForecast") : preferences.language === "it" ? "Non disponibile" : "Unavailable";
-  radarFrames = frames.map((frame) => ({
-    ...frame,
-    tileUrl: `${data.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`
+  const validTimes = metadata.valid_times || [];
+  if (!validTimes.length) throw new Error(preferences.language === "it" ? "Nessun orario previsionale." : "No forecast times available.");
+
+  const now = Date.now();
+  const startIndex = validTimes.reduce((best, time, index) => Date.parse(time) <= now ? index : best, 0);
+  radarFrames = validTimes.slice(startIndex, startIndex + 3).map((time, offset) => ({
+    time: Date.parse(time) / 1000,
+    url: `om://${precipitationMapUrl}?time_step=valid_times_${startIndex + offset}&variable=precipitation`
   }));
+  els.radarState.textContent = t("radarForecast");
   frameIndex = 0;
   els.frameSlider.min = "0";
   els.frameSlider.max = String(Math.max(0, radarFrames.length - 1));

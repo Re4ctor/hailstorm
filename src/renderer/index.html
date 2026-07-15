@@ -149,10 +149,10 @@
         <button type="button" class="mobileSidebarToggle" id="mobileSidebarToggle" aria-controls="sidebar" aria-expanded="false">Dati</button>
         <div class="mapTop">
           <div>
-            <span class="overline" id="radarTitle">Radar live</span>
-            <strong id="radarSubtitle">Traccia temporali</strong>
+            <span class="overline" id="radarTitle">Previsione precipitazioni</span>
+            <strong id="radarSubtitle">Prossime 2 ore</strong>
           </div>
-          <span class="liveDot" id="radarState">Online</span>
+          <span class="liveDot" id="radarState">Previsione</span>
         </div>
         <div class="mapToolbar">
           <div class="frameControl">
@@ -186,7 +186,7 @@
             <span id="sheetTrend">Trend: --</span>
           </span>
         </button>
-        <div class="radarLegend" aria-label="Legenda intensità radar">
+        <div class="radarLegend" aria-label="Legenda intensità precipitazioni">
           <span id="legendWeak">Debole</span>
           <div class="legendRamp"></div>
           <span id="legendStrong">Forte</span>
@@ -199,6 +199,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
-    <script src="./app.js?v=web-features"></script>
+    <script src="https://unpkg.com/@openmeteo/weather-map-layer@0.0.19/dist/index.js"></script>
+    <script src="./app.js?v=precipitation-forecast"></script>
   </body>
 </html>
