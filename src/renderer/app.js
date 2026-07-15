@@ -300,7 +300,7 @@ let savedPlaces = readJson(storageKeys.saved, []);
 let preferences = {
   language: "it",
   riskThreshold: 50,
-  radarOpacity: 52,
+  radarOpacity: 40,
   forecastHours: 24,
   forecastDay: 0,
   forecastOffsetHours: 0,
@@ -309,6 +309,7 @@ let preferences = {
   mapLayer: "voyager",
   ...readJson(storageKeys.prefs, {})
 };
+if (Number(preferences.radarOpacity) === 52) preferences.radarOpacity = 40;
 
 function readJson(key, fallback) {
   try {
@@ -891,7 +892,7 @@ async function loadRadar() {
   const startIndex = validTimes.reduce((best, time, index) => Date.parse(time) <= now ? index : best, 0);
   radarFrames = validTimes.slice(startIndex, startIndex + 3).map((time, offset) => ({
     time: Date.parse(time) / 1000,
-    url: `om://${precipitationMapUrl}?time_step=valid_times_${startIndex + offset}&variable=precipitation`
+    url: `om://${precipitationMapUrl}?time_step=valid_times_${startIndex + offset}&variable=precipitation&dark=${preferences.mapLayer === "dark"}`
   }));
   els.radarState.textContent = t("radarForecast");
   frameIndex = 0;
@@ -1428,6 +1429,7 @@ els.mapLayer.addEventListener("change", () => {
   preferences.mapLayer = els.mapLayer.value;
   persistPreferences();
   setBaseLayer();
+  loadRadar();
 });
 window.addEventListener("resize", () => {
   if (map) map.invalidateSize();

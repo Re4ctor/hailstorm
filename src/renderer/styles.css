@@ -765,12 +765,12 @@ h2 {
 .radarLegend {
   position: absolute;
   z-index: 500;
-  border: 1px solid rgb(16 20 24 / 12%);
+  border: 1px solid rgb(255 255 255 / 12%);
   border-radius: 8px;
-  background: rgb(248 250 248 / 88%);
-  color: #151a1f;
-  box-shadow: 0 16px 40px rgb(18 27 34 / 18%);
-  backdrop-filter: blur(10px);
+  background: rgb(17 21 25 / 92%);
+  color: #edf1ee;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 24%);
+  backdrop-filter: blur(12px);
 }
 
 .mapTop {
@@ -787,7 +787,7 @@ h2 {
 .overline {
   display: block;
   margin-bottom: 2px;
-  color: #68737a;
+  color: #9ba5aa;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -801,7 +801,7 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #256b49;
+  color: #72d5a2;
   font-size: 12px;
   font-weight: 750;
 }
@@ -815,35 +815,34 @@ h2 {
 }
 
 .mapToolbar {
-  left: 16px;
-  bottom: 16px;
+  bottom: 20px;
+  left: 50%;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  width: fit-content;
-  max-width: calc(100% - 32px);
-  padding: 7px;
+  gap: 8px;
+  width: min(680px, calc(100% - 40px));
+  padding: 10px;
+  transform: translateX(-50%);
 }
 
 .mapToolbar button {
   min-width: 38px;
   height: 34px;
   padding: 0 11px;
-  border-color: rgb(16 20 24 / 10%);
-  background: #ffffff;
-  color: #151a1f;
+  border-color: rgb(255 255 255 / 12%);
+  background: #242a2f;
+  color: #edf1ee;
 }
 
 .mapToolbar select {
   height: 34px;
-  border-color: rgb(16 20 24 / 10%);
-  background: #ffffff;
-  color: #151a1f;
+  border-color: rgb(255 255 255 / 12%);
+  background: #242a2f;
+  color: #edf1ee;
 }
 
 .mapToolbar button:hover {
-  background: #f0f3f1;
+  background: #30373d;
 }
 
 .mapToolbar button:disabled {
@@ -854,14 +853,15 @@ h2 {
 
 .frameControl {
   display: grid;
+  flex: 1;
   gap: 5px;
-  min-width: 178px;
+  min-width: 260px;
   padding: 0 8px;
 }
 
 #frameLabel {
   min-width: 0;
-  color: #3f4a50;
+  color: #edf1ee;
   font-size: 13px;
   transition:
     opacity 180ms ease,
@@ -883,16 +883,16 @@ h2 {
 #frameSlider::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #e9834e var(--frame-progress, 0%), rgb(16 20 24 / 18%) var(--frame-progress, 0%));
+  background: linear-gradient(90deg, #e9834e var(--frame-progress, 0%), rgb(255 255 255 / 18%) var(--frame-progress, 0%));
 }
 
 #frameSlider::-webkit-slider-thumb {
   width: 18px;
   height: 18px;
   margin-top: -7px;
-  border: 2px solid #ffffff;
+  border: 3px solid #e9834e;
   border-radius: 50%;
-  background: #151a1f;
+  background: #f4f6f4;
   box-shadow: 0 2px 8px rgb(18 27 34 / 22%);
   -webkit-appearance: none;
 }
@@ -922,16 +922,23 @@ h2 {
   opacity: 0.5;
 }
 
+.timeScale {
+  display: flex;
+  justify-content: space-between;
+  color: #89949a;
+  font-size: 10px;
+}
+
 .opacityControl {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   height: 34px;
   padding: 0 9px;
-  border: 1px solid rgb(16 20 24 / 10%);
+  border: 1px solid rgb(255 255 255 / 12%);
   border-radius: 8px;
-  background: #ffffff;
-  color: #3f4a50;
+  background: #242a2f;
+  color: #c7cfca;
   font-size: 12px;
 }
 
@@ -947,13 +954,13 @@ h2 {
   top: 76px;
   left: 16px;
   z-index: 500;
-  border: 1px solid rgb(16 20 24 / 12%);
+  border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 8px;
   padding: 6px 8px;
-  background: rgb(248 250 248 / 88%);
-  color: #4a555c;
+  background: rgb(17 21 25 / 88%);
+  color: #aeb7b2;
   font-size: 12px;
-  box-shadow: 0 8px 18px rgb(18 27 34 / 12%);
+  box-shadow: 0 8px 18px rgb(0 0 0 / 18%);
   backdrop-filter: blur(10px);
 }
 
@@ -967,12 +974,12 @@ h2 {
 
 .radarLegend {
   right: 16px;
-  bottom: 16px;
+  bottom: 20px;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  color: #3f4a50;
+  color: #c7cfca;
   font-size: 12px;
 }
 
@@ -1504,7 +1511,7 @@ h2 {
   .refreshStamp {
     top: calc(68px + env(safe-area-inset-top));
     left: 10px;
-    background: rgb(248 250 248 / 92%);
+    background: rgb(17 21 25 / 92%);
   }
 
   .mapToolbar {
@@ -1516,7 +1523,8 @@ h2 {
     width: auto;
     max-width: none;
     padding: 8px;
-    background: rgb(248 250 248 / 94%);
+    background: rgb(17 21 25 / 95%);
+    transform: none;
   }
 
   .mapToolbar button,
@@ -1556,7 +1564,7 @@ h2 {
   .radarLegend {
     right: 10px;
     bottom: calc(var(--mobile-toolbar-clearance) + 106px + env(safe-area-inset-bottom));
-    background: rgb(248 250 248 / 92%);
+    background: rgb(17 21 25 / 92%);
   }
 
   .mobileForecastSheet.is-open + .radarLegend {

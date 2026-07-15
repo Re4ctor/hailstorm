@@ -158,6 +158,7 @@
           <div class="frameControl">
             <label id="frameLabel" for="frameSlider">Prossime 2 ore</label>
             <input id="frameSlider" type="range" min="0" max="0" value="0" step="1" disabled />
+            <div class="timeScale" aria-hidden="true"><span>Ora</span><span>+1h</span><span>+2h</span></div>
           </div>
           <button id="refreshForecast" title="Aggiorna previsione">Aggiorna</button>
           <select id="mapLayer" title="Livello mappa">
@@ -166,8 +167,8 @@
             <option value="terrain" id="layerTerrain">Terreno</option>
           </select>
           <label class="opacityControl" for="radarOpacity">
-            Radar
-            <input id="radarOpacity" type="range" min="20" max="85" value="52" />
+            Livello
+            <input id="radarOpacity" type="range" min="20" max="85" value="40" />
           </label>
         </div>
         <div class="refreshStamp" id="refreshStamp">Mai aggiornato</div>
