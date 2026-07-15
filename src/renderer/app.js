@@ -606,6 +606,7 @@ function updateForecastWindowControls(rows) {
   els.forecastDay.value = String(preferences.forecastDay);
   els.prevForecastWindow.disabled = offset <= 0;
   els.nextForecastWindow.disabled = offset >= maxOffset;
+  els.forecastTimeSlider.disabled = !rows?.length;
   els.forecastTimeSlider.max = String(maxOffset);
   els.forecastTimeSlider.value = String(offset);
   els.forecastTimeSlider.style.setProperty("--forecast-progress", `${maxOffset > 0 ? (offset / maxOffset) * 100 : 0}%`);
@@ -1044,13 +1045,6 @@ function toggleRadarPlayback() {
     }
     showRadarFrame(frameIndex + 1);
   }, 1050);
-}
-
-function syncRadarForecastHour(offset) {
-  const futureFrame = radarFrames[radarNowIndex + 1];
-  if (!futureFrame?.forecast || offset < 0 || offset > 2) return;
-  if (radarTimer) toggleRadarPlayback();
-  showRadarFrame(radarNowIndex + Math.round(offset * 6));
 }
 
 function updateLastUpdated() {
@@ -1509,7 +1503,6 @@ function setForecastOffset(offset, commit = true) {
   els.forecastDay.value = String(selectedForecastDay());
   if (commit) persistPreferences();
   if (currentPlace && currentForecast) renderRisk(currentPlace, currentForecast);
-  syncRadarForecastHour(preferences.forecastOffsetHours);
   if (commit) refreshSavedComparison();
 }
 
