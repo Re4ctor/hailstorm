@@ -10,7 +10,7 @@
       crossorigin=""
     />
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=web-features" />
+    <link rel="stylesheet" href="./styles.css?v=meteo-layer" />
   </head>
   <body>
     <main class="shell">
@@ -152,7 +152,7 @@
             <span class="overline" id="radarTitle">Previsione precipitazioni</span>
             <strong id="radarSubtitle">Prossime 2 ore</strong>
           </div>
-          <span class="liveDot" id="radarState">Previsione</span>
+          <span class="layerState" id="radarState">Previsione</span>
         </div>
         <div class="mapToolbar">
           <div class="frameControl">
@@ -168,7 +168,7 @@
           </select>
           <label class="opacityControl" for="radarOpacity">
             Livello
-            <input id="radarOpacity" type="range" min="20" max="85" value="40" />
+            <input id="radarOpacity" type="range" min="30" max="85" value="64" />
           </label>
         </div>
         <div class="refreshStamp" id="refreshStamp">Mai aggiornato</div>
@@ -188,9 +188,15 @@
           </span>
         </button>
         <div class="radarLegend" aria-label="Legenda intensità precipitazioni">
-          <span id="legendWeak">Debole</span>
-          <div class="legendRamp"></div>
-          <span id="legendStrong">Forte</span>
+          <div class="legendHeading">
+            <span id="legendWeak">Debole</span>
+            <span class="legendUnit">mm/h</span>
+            <span id="legendStrong">Forte</span>
+          </div>
+          <div class="legendRamp" aria-hidden="true"></div>
+          <div class="legendTicks" aria-hidden="true">
+            <span>0.5</span><span>1</span><span>4</span><span>10+</span>
+          </div>
         </div>
       </section>
     </main>
@@ -201,6 +207,6 @@
       crossorigin=""
     ></script>
     <script src="https://unpkg.com/@openmeteo/weather-map-layer@0.0.19/dist/index.js"></script>
-    <script src="./app.js?v=precipitation-forecast"></script>
+    <script src="./app.js?v=meteo-layer"></script>
   </body>
 </html>

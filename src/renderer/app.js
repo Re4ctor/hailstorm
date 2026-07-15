@@ -2,6 +2,23 @@ const geocodeUrl = "https://geocoding-api.open-meteo.com/v1/search";
 const forecastUrl = "https://api.open-meteo.com/v1/forecast";
 const precipitationMapUrl = "https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json";
 const mapStartZoom = 7;
+const precipitationColorScale = {
+  type: "breakpoint",
+  unit: "mm",
+  breakpoints: [0.01, 0.15, 0.5, 1, 2, 4, 7, 10, 15, 25],
+  colors: [
+    [61, 105, 132, 0],
+    [71, 166, 190, 0],
+    [49, 153, 174, 0.3],
+    [41, 139, 119, 0.56],
+    [86, 158, 95, 0.72],
+    [191, 184, 74, 0.82],
+    [222, 146, 66, 0.9],
+    [211, 92, 65, 0.96],
+    [174, 60, 70, 1],
+    [134, 48, 67, 1]
+  ]
+};
 const storageKeys = {
   saved: "hailWatch.savedPlaces",
   prefs: "hailWatch.preferences",
@@ -300,7 +317,7 @@ let savedPlaces = readJson(storageKeys.saved, []);
 let preferences = {
   language: "it",
   riskThreshold: 50,
-  radarOpacity: 40,
+  radarOpacity: 64,
   forecastHours: 24,
   forecastDay: 0,
   forecastOffsetHours: 0,
@@ -309,7 +326,7 @@ let preferences = {
   mapLayer: "voyager",
   ...readJson(storageKeys.prefs, {})
 };
-if (Number(preferences.radarOpacity) === 52) preferences.radarOpacity = 40;
+if ([40, 52].includes(Number(preferences.radarOpacity))) preferences.radarOpacity = 64;
 
 function readJson(key, fallback) {
   try {
@@ -849,7 +866,16 @@ function ensureMap(place) {
     setBaseLayer();
     if (window.OMWeatherMapLayer) {
       weatherMapAdapter = window.OMWeatherMapLayer.addLeafletProtocolSupport(L);
-      weatherMapAdapter.addProtocol("om", window.OMWeatherMapLayer.omProtocol);
+      const protocolSettings = {
+        ...window.OMWeatherMapLayer.defaultOmProtocolSettings,
+        colorScales: {
+          ...window.OMWeatherMapLayer.defaultOmProtocolSettings.colorScales,
+          precipitation: precipitationColorScale
+        }
+      };
+      weatherMapAdapter.addProtocol("om", window.OMWeatherMapLayer.omProtocol, protocolSettings);
+      map.createPane("weatherPane");
+      map.getPane("weatherPane").classList.add("weatherPane");
       map.on("moveend", updateWeatherMapBounds);
       updateWeatherMapBounds();
     }
@@ -875,6 +901,7 @@ function createRadarLayer(frame) {
   return weatherMapAdapter.createTileLayer(frame.url, {
     opacity: 0,
     maxZoom: 12,
+    pane: "weatherPane",
     attribution: "Forecast &copy; Open-Meteo, DWD"
   });
 }
