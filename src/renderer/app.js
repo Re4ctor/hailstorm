@@ -64,8 +64,8 @@ const copy = {
     ready: "Pronto",
     search: "Cerca",
     location: "Località",
-    save: "Salva",
-    remove: "Rimuovi",
+    save: "Salva località",
+    remove: "Rimuovi località",
     saved: "Salvati",
     threshold: "Avviso da",
     languageLabel: "Lingua",
@@ -73,16 +73,24 @@ const copy = {
     forecastDay: "Giorno",
     today: "Oggi",
     tomorrow: "Domani",
-    useLocation: "Posizione",
+    useLocation: "Usa la mia posizione",
     currentLocation: "Posizione attuale",
-    locating: "Rilevo posizione...",
-    locationUnavailable: "Posizione non disponibile.",
+    locating: "Rilevo la posizione...",
+    locationUnavailable: "Posizione non disponibile. Cerca una città.",
     copyReport: "Copia report",
-    exportReport: "Esporta",
+    exportReport: "Esporta report",
     renamePlace: "Rinomina",
     copiedReport: "Report copiato",
-    copyFailed: "Copia non riuscita",
+    copyFailed: "Impossibile copiare. Riprova o esporta il report.",
     exportedReport: "Report esportato",
+    forecastLoadingDetail: "Aggiorno rischio, condizioni e andamento orario.",
+    retry: "Riprova",
+    dataError: "Dati non disponibili",
+    forecastError: "Previsione non disponibile. Riprova.",
+    comparisonLoading: "Aggiorno le località salvate...",
+    comparisonError: "Alcune località non sono state aggiornate.",
+    radarError: "Precipitazioni non disponibili",
+    radarRetry: "Premi Aggiorna per riprovare.",
     autoRefresh: "Auto",
     detailMode: "Vista",
     detailedMode: "Dettaglio",
@@ -103,7 +111,7 @@ const copy = {
     layerTerrain: "Terreno",
     weak: "Debole",
     strong: "Forte",
-    noSaved: "Nessuna località salvata",
+    noSaved: "Salva una località per confrontarla",
     noRisk: "Nessuna finestra severa nel periodo selezionato",
     severe: "Finestra severa",
     updatedNever: "Mai aggiornato",
@@ -144,8 +152,8 @@ const copy = {
     ready: "Ready",
     search: "Search",
     location: "Location",
-    save: "Save",
-    remove: "Remove",
+    save: "Save location",
+    remove: "Remove location",
     saved: "Saved",
     threshold: "Alert from",
     languageLabel: "Language",
@@ -153,16 +161,24 @@ const copy = {
     forecastDay: "Day",
     today: "Today",
     tomorrow: "Tomorrow",
-    useLocation: "Location",
+    useLocation: "Use my location",
     currentLocation: "Current location",
     locating: "Detecting location...",
-    locationUnavailable: "Location unavailable.",
+    locationUnavailable: "Location unavailable. Search for a city instead.",
     copyReport: "Copy report",
-    exportReport: "Export",
+    exportReport: "Export report",
     renamePlace: "Rename",
     copiedReport: "Report copied",
-    copyFailed: "Copy failed",
+    copyFailed: "Could not copy. Try again or export the report.",
     exportedReport: "Report exported",
+    forecastLoadingDetail: "Updating risk, conditions, and the hourly outlook.",
+    retry: "Try again",
+    dataError: "Data unavailable",
+    forecastError: "Forecast unavailable. Try again.",
+    comparisonLoading: "Updating saved locations...",
+    comparisonError: "Some locations could not be updated.",
+    radarError: "Precipitation unavailable",
+    radarRetry: "Select Refresh to try again.",
     autoRefresh: "Auto",
     detailMode: "View",
     detailedMode: "Detailed",
@@ -183,7 +199,7 @@ const copy = {
     layerTerrain: "Terrain",
     weak: "Weak",
     strong: "Strong",
-    noSaved: "No saved locations",
+    noSaved: "Save a location to compare it",
     noRisk: "No severe window in the selected range",
     severe: "Severe window",
     updatedNever: "Never updated",
@@ -290,7 +306,15 @@ const els = {
   radarOpacity: document.querySelector("#radarOpacity"),
   refreshForecast: document.querySelector("#refreshForecast"),
   refreshStamp: document.querySelector("#refreshStamp"),
-  mapLayer: document.querySelector("#mapLayer")
+  mapLayer: document.querySelector("#mapLayer"),
+  forecastState: document.querySelector("#forecastState"),
+  forecastStateTitle: document.querySelector("#forecastStateTitle"),
+  forecastStateDetail: document.querySelector("#forecastStateDetail"),
+  forecastSkeleton: document.querySelector("#forecastSkeleton"),
+  retryForecast: document.querySelector("#retryForecast"),
+  compareStatus: document.querySelector("#compareStatus"),
+  compareStatusText: document.querySelector("#compareStatusText"),
+  retryComparison: document.querySelector("#retryComparison")
 };
 
 let map;
@@ -400,11 +424,37 @@ function setStatus(message) {
   els.status.textContent = message;
 }
 
+function setForecastState(state, detail = "") {
+  const ready = state === "ready";
+  const error = state === "error";
+  els.forecastState.hidden = ready;
+  els.forecastState.classList.toggle("is-error", error);
+  els.forecastState.setAttribute("aria-busy", String(state === "loading"));
+  els.forecastStateTitle.textContent = error ? t("dataError") : t("forecast");
+  els.forecastStateDetail.textContent = detail || (error ? t("forecastError") : t("forecastLoadingDetail"));
+  els.forecastSkeleton.hidden = state !== "loading";
+  els.retryForecast.hidden = !error;
+  if (!ready) {
+    els.sheetRiskLabel.textContent = error ? t("dataError") : t("forecast");
+    els.sheetScore.textContent = "--";
+    els.sheetScore.style.color = "var(--risk-neutral)";
+  }
+}
+
+function setComparisonState(state, failures = 0) {
+  const ready = state === "ready";
+  els.compareStatus.hidden = ready;
+  els.compareStatus.classList.toggle("is-error", state === "error");
+  els.compareStatusText.textContent = state === "loading"
+    ? t("comparisonLoading")
+    : `${t("comparisonError")} ${failures ? `(${failures})` : ""}`.trim();
+  els.retryComparison.hidden = state !== "error";
+}
+
 function riskColor(score) {
-  if (score >= 75) return "#ef5d68";
-  if (score >= 50) return "#f58d54";
-  if (score >= 25) return "#f0c95a";
-  return "#5ee0a0";
+  if (score >= 75) return "var(--danger)";
+  if (score >= Number(preferences.riskThreshold)) return "var(--accent)";
+  return "var(--risk-neutral)";
 }
 
 function riskLabel(score) {
@@ -688,7 +738,7 @@ function findSevereWindow(rows, timezone) {
   const duration = best.end - best.start + 1;
   const peakRow = visibleRows.slice(best.start, best.end + 1).reduce((top, row) => (row.score > top.score ? row : top), visibleRows[best.start]);
   const cause = peakRow.reasons?.[0]?.label || weatherText(peakRow.weather_code);
-  return `${t("severe")}: ${formatHour(visibleRows[best.start].time, timezone)}-${formatHour(visibleRows[best.end].time, timezone)} · ${duration}h · ${best.peak} · ${cause}`;
+  return `${t("severe")}: ${formatHour(visibleRows[best.start].time, timezone)}-${formatHour(visibleRows[best.end].time, timezone)}, ${duration}h, ${best.peak}, ${cause}`;
 }
 
 function renderRisk(place, forecast) {
@@ -784,14 +834,14 @@ async function searchCities(name, count = 5) {
   url.searchParams.set("format", "json");
 
   const response = await fetch(url);
-  if (!response.ok) throw new Error(preferences.language === "it" ? "Ricerca città non riuscita." : "City search failed.");
+  if (!response.ok) throw new Error(preferences.language === "it" ? "Ricerca non disponibile. Riprova." : "Search unavailable. Try again.");
   const data = await response.json();
   return data.results || [];
 }
 
 async function searchCity(name) {
   const results = await searchCities(name, 1);
-  if (!results.length) throw new Error(preferences.language === "it" ? "Nessuna città trovata." : "No city found.");
+  if (!results.length) throw new Error(preferences.language === "it" ? "Località non trovata. Controlla il nome e riprova." : "Location not found. Check the name and try again.");
   return results[0];
 }
 
@@ -814,9 +864,9 @@ async function getForecast(place) {
   const forecastCache = readJson(storageKeys.forecastCache, {});
   try {
     const response = await fetch(url);
-    if (!response.ok) throw new Error(preferences.language === "it" ? "Richiesta previsioni non riuscita." : "Forecast request failed.");
+    if (!response.ok) throw new Error(t("forecastError"));
     const forecast = await response.json();
-    if (!forecast.hourly?.time?.length) throw new Error(preferences.language === "it" ? "Previsione non disponibile." : "Forecast unavailable.");
+    if (!forecast.hourly?.time?.length) throw new Error(t("forecastError"));
     forecast.hourly.time = forecast.hourly.time.map((time) => typeof time === "number" ? time * 1000 : time);
     forecastCache[cacheKey(place)] = { at: Date.now(), forecast };
     writeJson(storageKeys.forecastCache, forecastCache);
@@ -908,6 +958,7 @@ function createRadarLayer(frame) {
 
 async function loadRadar() {
   const generation = ++radarLoadGeneration;
+  els.radarState.textContent = t("loadingRadar");
   const response = await fetch(precipitationMapUrl);
   if (!response.ok) throw new Error(preferences.language === "it" ? "Previsione mappa non disponibile." : "Map forecast unavailable.");
   const metadata = await response.json();
@@ -1046,6 +1097,8 @@ function renderStaticText() {
   els.legendWeak.textContent = t("weak");
   els.legendStrong.textContent = t("strong");
   els.refreshForecast.textContent = t("refresh");
+  els.retryForecast.textContent = t("retry");
+  els.retryComparison.textContent = t("retry");
   els.mobileSidebarToggle.textContent = document.querySelector(".shell").classList.contains("is-sidebar-open") ? t("sidebarClose") : t("sidebarOpen");
   els.mapLayer.setAttribute("title", t("mapLayerTitle"));
   document.querySelector(".radarLegend").setAttribute("aria-label", t("legendLabel"));
@@ -1099,16 +1152,19 @@ async function refreshSavedComparison() {
   const generation = ++comparisonGeneration;
   if (!savedPlaces.length) {
     els.routeSummary.textContent = "";
+    setComparisonState("ready");
     els.compareList.innerHTML = `<span class="emptySaved">${t("noSaved")}</span>`;
     renderSavedMarkers();
     return;
   }
 
+  setComparisonState("loading");
   els.compareList.innerHTML = savedPlaces
     .map((place) => `<div class="compareItem"><span>${escapeHtml(place.name)}</span><strong>...</strong></div>`)
     .join("");
 
   const updated = [];
+  let failures = 0;
   for (const place of [...savedPlaces]) {
     try {
       const forecast = await getForecast(place);
@@ -1119,11 +1175,13 @@ async function refreshSavedComparison() {
       maybeNotify(place, max);
       updated.push({ ...place, lastScore: max.score, lastTime: max.time, lastTimezone: forecast.timezone });
     } catch {
+      failures += 1;
       updated.push({ ...place, lastScore: null });
     }
   }
 
   if (generation !== comparisonGeneration) return;
+  setComparisonState(failures ? "error" : "ready", failures);
   savedPlaces = updated.sort((a, b) => Number(b.lastScore || 0) - Number(a.lastScore || 0));
   writeJson(storageKeys.saved, savedPlaces);
   renderSavedPlaces();
@@ -1135,7 +1193,7 @@ async function refreshSavedComparison() {
   els.compareList.innerHTML = savedPlaces
     .map((place) => {
       const score = Number.isFinite(place.lastScore) ? place.lastScore : "--";
-      const color = Number.isFinite(place.lastScore) ? riskColor(place.lastScore) : "#8e969c";
+      const color = Number.isFinite(place.lastScore) ? riskColor(place.lastScore) : "var(--risk-neutral)";
       const time = place.lastTime ? formatHour(place.lastTime, place.lastTimezone) : "";
       return `<button type="button" class="compareItem" data-place="${placeKey(place)}">
         <span>${escapeHtml(place.name)}${time ? ` · ${time}` : ""}</span>
@@ -1168,21 +1226,26 @@ async function maybeNotify(place, max) {
 
 async function loadPlace(place) {
   const generation = ++loadGeneration;
+  let forecastRendered = false;
   citySearchGeneration += 1;
   suggestionGeneration += 1;
   clearTimeout(suggestionTimer);
   els.suggestions.innerHTML = "";
   try {
     currentPlace = place;
+    currentForecast = null;
     setMobileSidebar(false);
     ensureMap(place);
     renderSavedPlaces();
 
     setStatus(t("forecast"));
+    setForecastState("loading");
     const forecast = await getForecast(place);
     if (generation !== loadGeneration) return;
     currentForecast = forecast;
     renderRisk(place, currentForecast);
+    forecastRendered = true;
+    setForecastState("ready");
     const rows = selectedRows(getHourlyRows(currentForecast));
     const max = rows.reduce((best, row) => row.score > best.score ? row : best, rows[0]);
     rememberHistory(place, max.score);
@@ -1198,7 +1261,15 @@ async function loadPlace(place) {
     refreshSavedComparison();
   } catch (error) {
     console.error(error);
-    if (generation === loadGeneration) setStatus(error.message);
+    if (generation === loadGeneration) {
+      setStatus(error.message);
+      if (!forecastRendered) {
+        setForecastState("error");
+      } else {
+        els.radarState.textContent = t("radarError");
+        els.frameLabel.textContent = t("radarRetry");
+      }
+    }
   }
 }
 
@@ -1211,7 +1282,10 @@ async function loadCity(city) {
     await loadPlace(place);
   } catch (error) {
     console.error(error);
-    if (generation === citySearchGeneration) setStatus(error.message);
+    if (generation === citySearchGeneration) {
+      setStatus(error.message);
+      if (!currentForecast) setForecastState("error", error.message);
+    }
   }
 }
 
@@ -1257,7 +1331,7 @@ function buildReport() {
     `${t("riskPrefix")}: ${max.score} (${riskLabel(max.score)})`,
     `${preferences.language === "it" ? "Picco" : "Peak"}: ${formatDateTime(max.time, currentForecast.timezone)}`,
     severeWindow,
-    `${weatherText(max.weather_code)} · CAPE ${Math.round(max.cape || 0)} J/kg · ${Math.round(max.precipitation_probability || 0)}%`
+    `${weatherText(max.weather_code)}, CAPE ${Math.round(max.cape || 0)} J/kg, ${Math.round(max.precipitation_probability || 0)}%`
   ].join("\n");
 }
 
@@ -1384,6 +1458,11 @@ els.compareList.addEventListener("click", (event) => {
 
 els.savePlace.addEventListener("click", saveCurrentPlace);
 els.useLocation.addEventListener("click", loadCurrentLocation);
+els.retryForecast.addEventListener("click", () => {
+  if (currentPlace) loadPlace(currentPlace);
+  else loadCity(els.cityInput.value.trim());
+});
+els.retryComparison.addEventListener("click", refreshSavedComparison);
 els.mobileSidebarToggle.addEventListener("click", () => {
   const open = !document.querySelector(".shell").classList.contains("is-sidebar-open");
   setMobileSidebar(open);

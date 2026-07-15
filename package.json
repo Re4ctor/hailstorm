@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "start": "node scripts/serve.js",
-    "dev": "node scripts/serve.js"
+    "dev": "node scripts/serve.js",
+    "test": "node scripts/check.js"
   }
 }

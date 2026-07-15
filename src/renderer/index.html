@@ -28,7 +28,7 @@
         <form class="search" id="searchForm">
           <div class="fieldTop">
             <label for="cityInput" id="locationLabel">Località</label>
-            <button type="button" class="textButton" id="useLocation">Posizione</button>
+            <button type="button" class="textButton" id="useLocation">Usa la mia posizione</button>
           </div>
           <div class="searchRow">
             <input id="cityInput" name="city" value="Milan" autocomplete="off" />
@@ -37,7 +37,7 @@
           <div class="suggestions" id="suggestions"></div>
           <div class="savedHead">
             <span id="savedTitle">Salvati</span>
-            <button type="button" id="savePlace">Salva</button>
+            <button type="button" id="savePlace">Salva località</button>
           </div>
           <div class="savedPlaces" id="savedPlaces"></div>
           <div class="settingGrid">
@@ -82,12 +82,23 @@
           </div>
           <div class="actionRow">
             <button type="button" id="copyReport">Copia report</button>
-            <button type="button" id="exportReport">Esporta</button>
+            <button type="button" id="exportReport">Esporta report</button>
             <button type="button" id="renamePlace">Rinomina</button>
           </div>
         </form>
 
-        <section class="riskPanel" aria-live="polite">
+        <section class="forecastState" id="forecastState" aria-live="polite" aria-busy="true">
+          <div class="stateCopy">
+            <strong id="forecastStateTitle">Caricamento previsione</strong>
+            <span id="forecastStateDetail">Aggiorno rischio, condizioni e andamento orario.</span>
+          </div>
+          <div class="stateSkeleton" id="forecastSkeleton" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <button type="button" id="retryForecast" hidden>Riprova</button>
+        </section>
+
+        <section class="riskPanel forecastSurface" aria-live="polite">
           <div class="riskHeader">
             <div>
               <span>Gravità</span>
@@ -112,7 +123,7 @@
           <a class="warningLink" id="warningLink" href="#" target="_blank" rel="noreferrer">Avvisi ufficiali</a>
         </section>
 
-        <section class="timeline">
+        <section class="timeline forecastSurface">
           <div class="timelineHead">
             <div class="sectionTitle" id="hourlyTitle">Rischio orario</div>
             <div class="forecastWindowControl">
@@ -125,7 +136,7 @@
           <div class="hours" id="hours"></div>
         </section>
 
-        <section class="conditions">
+        <section class="conditions forecastSurface">
           <div class="sectionTitle" id="conditionsTitle">Condizioni</div>
           <div class="metrics" id="metrics"></div>
         </section>
@@ -133,6 +144,10 @@
         <section class="compareBlock">
           <div class="sectionTitle" id="compareTitle">Confronto salvati</div>
           <div class="routeSummary" id="routeSummary"></div>
+          <div class="compareStatus" id="compareStatus" role="status" hidden>
+            <span id="compareStatusText"></span>
+            <button type="button" id="retryComparison" hidden>Riprova</button>
+          </div>
           <div class="compareList" id="compareList"></div>
         </section>
 
