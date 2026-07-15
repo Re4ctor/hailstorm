@@ -104,6 +104,7 @@ const copy = {
     looking: "Cerco",
     forecast: "Carico previsione...",
     radar: "Aggiorno radar...",
+    radarForecast: "previsione movimento",
     synced: "Sincronizzato",
     minimum: "Minimo",
     low: "Basso",
@@ -188,6 +189,7 @@ const copy = {
     looking: "Searching",
     forecast: "Loading forecast...",
     radar: "Updating radar...",
+    radarForecast: "motion forecast",
     synced: "Synced",
     minimum: "Minimal",
     low: "Low",
@@ -809,7 +811,7 @@ async function searchCity(name) {
 }
 
 function cacheKey(place) {
-  return `${placeKey(place)}:forecast-168h-v2`;
+  return `${placeKey(place)}:forecast-168h-v3`;
 }
 
 async function getForecast(place) {
@@ -818,7 +820,7 @@ async function getForecast(place) {
   url.searchParams.set("longitude", place.longitude);
   url.searchParams.set(
     "hourly",
-    "weather_code,precipitation_probability,precipitation,showers,cape,wind_gusts_10m,wind_direction_10m,freezing_level_height"
+    "weather_code,precipitation_probability,precipitation,showers,cape,wind_speed_10m,wind_gusts_10m,wind_direction_10m,freezing_level_height"
   );
   url.searchParams.set("forecast_hours", "168");
   url.searchParams.set("timeformat", "unixtime");
@@ -883,6 +885,55 @@ function ensureMap(place) {
   requestAnimationFrame(() => map.invalidateSize());
 }
 
+function forecastRadarFrames(latestFrame) {
+  const rows = currentForecast ? getHourlyRows(currentForecast) : [];
+  if (!latestFrame || !rows.length) return [];
+
+  let eastKm = 0;
+  let northKm = 0;
+  return Array.from({ length: 12 }, (_, index) => {
+    const wind = rows[Math.floor(index / 6)] || rows.at(-1);
+    const speed = Math.max(0, Number(wind.wind_speed_10m) || 0);
+    const direction = Number(wind.wind_direction_10m);
+    const bearing = (Number.isFinite(direction) ? direction + 180 : 0) * Math.PI / 180;
+    eastKm += Math.sin(bearing) * speed / 6;
+    northKm += Math.cos(bearing) * speed / 6;
+    return {
+      ...latestFrame,
+      time: latestFrame.time + (index + 1) * 600,
+      forecast: true,
+      displacementKm: Math.hypot(eastKm, northKm),
+      movementBearing: (Math.atan2(eastKm, northKm) * 180 / Math.PI + 360) % 360
+    };
+  });
+}
+
+function createRadarLayer(frame) {
+  const options = {
+    tileSize: 256,
+    opacity: 0,
+    zIndex: 10,
+    maxZoom: 16,
+    maxNativeZoom: radarMaxNativeZoom,
+    keepBuffer: frame.forecast ? 1 : 0,
+    attribution: "Radar &copy; RainViewer"
+  };
+  if (!frame.forecast) return L.tileLayer(frame.tileUrl, options);
+
+  const layer = L.tileLayer(frame.tileUrl, options);
+  layer.createTile = function createTile(coords, done) {
+    const tile = L.TileLayer.prototype.createTile.call(this, coords, done);
+    const latitude = this._map.getCenter().lat * Math.PI / 180;
+    const pixelsPerKm = (256 * 2 ** coords.z) / (40075.017 * Math.cos(latitude));
+    const bearing = frame.movementBearing * Math.PI / 180;
+    const distance = frame.displacementKm * pixelsPerKm;
+    tile.style.marginLeft = `${Math.sin(bearing) * distance}px`;
+    tile.style.marginTop = `${-Math.cos(bearing) * distance}px`;
+    return tile;
+  };
+  return layer;
+}
+
 async function loadRadar() {
   const generation = ++radarLoadGeneration;
   const response = await fetch(rainViewerUrl);
@@ -891,9 +942,11 @@ async function loadRadar() {
   if (generation !== radarLoadGeneration) return;
   if (radarTimer) toggleRadarPlayback();
   const pastFrames = data.radar?.past || [];
-  const futureFrames = data.radar?.nowcast || [];
+  const providerFrames = data.radar?.nowcast || [];
+  const latestPastFrame = pastFrames.at(-1);
+  const futureFrames = providerFrames.length ? providerFrames : forecastRadarFrames(latestPastFrame);
   const frames = [...pastFrames, ...futureFrames];
-  els.radarState.textContent = futureFrames.length ? "Live" : preferences.language === "it" ? "Storico" : "History";
+  els.radarState.textContent = providerFrames.length ? "Live" : futureFrames.length ? t("radarForecast") : preferences.language === "it" ? "Storico" : "History";
   radarFrames = frames.map((frame) => ({
     ...frame,
     tileUrl: `${data.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`
@@ -921,7 +974,8 @@ function formatRadarFrameLabel(frame) {
     minute: "2-digit"
   }).format(date);
   let phase;
-  if (frameIndex > radarNowIndex) phase = preferences.language === "it" ? "previsione" : "forecast";
+  if (frame.forecast) phase = t("radarForecast");
+  else if (frameIndex > radarNowIndex) phase = preferences.language === "it" ? "previsione" : "forecast";
   else if (frameIndex === radarNowIndex) phase = preferences.language === "it" ? "ora" : "now";
   else phase = preferences.language === "it" ? "storico" : "past";
   return `${time} · ${phase} · ${frameIndex + 1}/${radarFrames.length}`;
@@ -937,14 +991,7 @@ function showRadarFrame(index) {
   if (!map || !radarFrames.length) return;
   frameIndex = clampFrameIndex(index);
   const frame = radarFrames[frameIndex];
-  const nextLayer = L.tileLayer(frame.tileUrl, {
-    tileSize: 256,
-    opacity: 0,
-    zIndex: 10,
-    maxZoom: 16,
-    maxNativeZoom: radarMaxNativeZoom,
-    attribution: "Radar &copy; RainViewer"
-  }).addTo(map);
+  const nextLayer = createRadarLayer(frame).addTo(map);
 
   radarLayer = nextLayer;
   radarLayers.add(nextLayer);
@@ -997,6 +1044,13 @@ function toggleRadarPlayback() {
     }
     showRadarFrame(frameIndex + 1);
   }, 1050);
+}
+
+function syncRadarForecastHour(offset) {
+  const futureFrame = radarFrames[radarNowIndex + 1];
+  if (!futureFrame?.forecast || offset < 0 || offset > 2) return;
+  if (radarTimer) toggleRadarPlayback();
+  showRadarFrame(radarNowIndex + Math.round(offset * 6));
 }
 
 function updateLastUpdated() {
@@ -1455,6 +1509,7 @@ function setForecastOffset(offset, commit = true) {
   els.forecastDay.value = String(selectedForecastDay());
   if (commit) persistPreferences();
   if (currentPlace && currentForecast) renderRisk(currentPlace, currentForecast);
+  syncRadarForecastHour(preferences.forecastOffsetHours);
   if (commit) refreshSavedComparison();
 }
 
