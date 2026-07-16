@@ -14,6 +14,8 @@ assert.match(js, /return "var\(--risk-neutral\)"/);
 assert.match(js, /https:\/\/api\.rainviewer\.com\/public\/weather-maps\.json/);
 assert.match(js, /https:\/\/map-tiles\.open-meteo\.com\/data_spatial\/dwd_icon\/latest\.json/);
 assert.match(js, /forecastMetadata\.valid_times/);
+assert.match(js, /variable=cloud_cover/);
+assert.match(js, /cloudLayer\.setOpacity/);
 assert.match(html, /id="playRadar"/);
 assert.match(html, /weather-map-layer/);
 assert.doesNotMatch(html + css + js, /[—–]/);

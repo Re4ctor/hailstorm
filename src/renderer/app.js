@@ -20,6 +20,19 @@ const precipitationColorScale = {
     [118, 34, 104, 1]
   ]
 };
+const cloudCoverColorScale = {
+  type: "breakpoint",
+  unit: "%",
+  breakpoints: [0, 20, 40, 60, 80, 100],
+  colors: [
+    [255, 255, 255, 0],
+    [224, 231, 235, 0.08],
+    [205, 214, 220, 0.16],
+    [181, 192, 200, 0.27],
+    [153, 165, 175, 0.4],
+    [126, 138, 149, 0.54]
+  ]
+};
 const storageKeys = {
   saved: "hailWatch.savedPlaces",
   prefs: "hailWatch.preferences",
@@ -942,7 +955,8 @@ function ensureMap(place) {
         ...window.OMWeatherMapLayer.defaultOmProtocolSettings,
         colorScales: {
           ...window.OMWeatherMapLayer.defaultOmProtocolSettings.colorScales,
-          precipitation: precipitationColorScale
+          precipitation: precipitationColorScale,
+          cloud_cover: cloudCoverColorScale
         }
       };
       weatherMapAdapter.addProtocol("om", window.OMWeatherMapLayer.omProtocol, protocolSettings);
@@ -971,12 +985,26 @@ function ensureMap(place) {
 function createRadarLayer(frame) {
   if (frame.source === "forecast") {
     if (!weatherMapAdapter) throw new Error(preferences.language === "it" ? "Livello previsionale non disponibile." : "Forecast layer unavailable.");
-    return weatherMapAdapter.createTileLayer(frame.url, {
+    const cloudLayer = weatherMapAdapter.createTileLayer(frame.cloudUrl, {
       opacity: 0,
       maxZoom: 12,
       pane: "weatherPane",
       attribution: "Forecast &copy; Open-Meteo, DWD"
     });
+    const precipitationLayer = weatherMapAdapter.createTileLayer(frame.url, {
+      opacity: 0,
+      maxZoom: 12,
+      pane: "weatherPane",
+      attribution: "Forecast &copy; Open-Meteo, DWD"
+    });
+    const forecastLayer = L.layerGroup([cloudLayer, precipitationLayer]);
+    forecastLayer.setOpacity = (opacity) => {
+      cloudLayer.setOpacity(opacity * 0.52);
+      precipitationLayer.setOpacity(opacity);
+      return forecastLayer;
+    };
+    precipitationLayer.once("load", () => forecastLayer.fire("load"));
+    return forecastLayer;
   }
   return L.tileLayer(frame.url, {
     opacity: 0,
@@ -1018,7 +1046,8 @@ async function loadRadar() {
       ...frame,
       isObserved: false,
       source: "forecast",
-      url: `om://${precipitationForecastUrl}?time_step=valid_times_${frame.index}&variable=precipitation&dark=${preferences.mapLayer === "dark"}`
+      url: `om://${precipitationForecastUrl}?time_step=valid_times_${frame.index}&variable=precipitation&dark=${preferences.mapLayer === "dark"}`,
+      cloudUrl: `om://${precipitationForecastUrl}?time_step=valid_times_${frame.index}&variable=cloud_cover&dark=${preferences.mapLayer === "dark"}`
     }));
   if (!forecastFrames.length) throw new Error(preferences.language === "it" ? "Previsione delle prossime 10 ore non disponibile." : "Next ten-hour forecast unavailable.");
 
