@@ -164,10 +164,10 @@
         <button type="button" class="mobileSidebarToggle" id="mobileSidebarToggle" aria-controls="sidebar" aria-expanded="false">Dati</button>
         <div class="mapTop">
           <div>
-            <span class="overline" id="radarTitle">Radar precipitazioni</span>
-            <strong id="radarSubtitle">Ultime 2 ore</strong>
+            <span class="overline" id="radarTitle">Radar e previsione precipitazioni</span>
+            <strong id="radarSubtitle">Ultime 2 ore + prossime 10 ore</strong>
           </div>
-          <span class="layerState" id="radarState">Radar live</span>
+          <span class="layerState" id="radarState">Radar + 10 ore</span>
         </div>
         <div class="mapToolbar">
           <button id="playRadar" type="button" aria-pressed="false" disabled>Riproduci</button>
@@ -223,6 +223,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
-    <script src="./app.js?v=live-radar"></script>
+    <script src="https://unpkg.com/@openmeteo/weather-map-layer@0.0.19/dist/index.js"></script>
+    <script src="./app.js?v=radar-forecast"></script>
   </body>
 </html>

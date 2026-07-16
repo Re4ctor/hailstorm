@@ -12,9 +12,10 @@ for (const id of js.matchAll(/querySelector\("#([^"]+)"\)/g)) {
 assert.match(css, /prefers-reduced-motion/);
 assert.match(js, /return "var\(--risk-neutral\)"/);
 assert.match(js, /https:\/\/api\.rainviewer\.com\/public\/weather-maps\.json/);
-assert.match(js, /metadata\.radar\?\.past/);
+assert.match(js, /https:\/\/map-tiles\.open-meteo\.com\/data_spatial\/dwd_icon\/latest\.json/);
+assert.match(js, /forecastMetadata\.valid_times/);
 assert.match(html, /id="playRadar"/);
-assert.doesNotMatch(html + js, /weather-map-layer|OMWeatherMapLayer|weatherMapAdapter/);
+assert.match(html, /weather-map-layer/);
 assert.doesNotMatch(html + css + js, /[—–]/);
 
 console.log("UI smoke checks passed");

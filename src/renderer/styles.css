@@ -1013,6 +1013,15 @@ h2 {
   transition: opacity var(--transition);
 }
 
+.weatherPane {
+  z-index: 250;
+  pointer-events: none;
+}
+
+.weatherPane canvas {
+  filter: saturate(0.92) contrast(1.06);
+}
+
 
 .radarLegend {
   right: 16px;

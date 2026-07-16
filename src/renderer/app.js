@@ -1,7 +1,25 @@
 const geocodeUrl = "https://geocoding-api.open-meteo.com/v1/search";
 const forecastUrl = "https://api.open-meteo.com/v1/forecast";
 const radarMetadataUrl = "https://api.rainviewer.com/public/weather-maps.json";
+const precipitationForecastUrl = "https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json";
 const mapStartZoom = 7;
+const precipitationColorScale = {
+  type: "breakpoint",
+  unit: "mm",
+  breakpoints: [0.01, 0.15, 0.5, 1, 2, 4, 7, 10, 15, 25],
+  colors: [
+    [27, 99, 203, 0],
+    [22, 143, 226, 0.2],
+    [46, 210, 236, 0.42],
+    [68, 194, 197, 0.58],
+    [149, 205, 89, 0.72],
+    [242, 213, 76, 0.82],
+    [242, 139, 54, 0.9],
+    [222, 60, 56, 0.96],
+    [170, 46, 112, 1],
+    [118, 34, 104, 1]
+  ]
+};
 const storageKeys = {
   saved: "hailWatch.savedPlaces",
   prefs: "hailWatch.preferences",
@@ -95,8 +113,8 @@ const copy = {
     conditions: "Condizioni",
     hourly: "Rischio orario",
     compare: "Confronto salvati",
-    radarTitle: "Radar precipitazioni",
-    radarSubtitle: "Ultime 2 ore",
+    radarTitle: "Radar e previsione precipitazioni",
+    radarSubtitle: "Ultime 2 ore + prossime 10 ore",
     layerMap: "Mappa",
     layerSatellite: "Satellite",
     layerDark: "Scura",
@@ -108,7 +126,7 @@ const copy = {
     severe: "Finestra severa",
     updatedNever: "Mai aggiornato",
     updated: "Aggiornato",
-    loadingRadar: "Caricamento radar live",
+    loadingRadar: "Caricamento radar e previsione",
     refresh: "Aggiorna",
     playRadar: "Riproduci",
     pauseRadar: "Pausa",
@@ -116,8 +134,8 @@ const copy = {
     legendLabel: "Legenda intensità precipitazioni",
     looking: "Cerco",
     forecast: "Carico previsione...",
-    radar: "Aggiorno radar live...",
-    radarLive: "Radar live",
+    radar: "Aggiorno radar e previsione...",
+    radarOutlook: "Radar + 10 ore",
     synced: "Sincronizzato",
     minimum: "Minimo",
     low: "Basso",
@@ -186,8 +204,8 @@ const copy = {
     conditions: "Conditions",
     hourly: "Hourly risk",
     compare: "Saved comparison",
-    radarTitle: "Live precipitation radar",
-    radarSubtitle: "Last 2 hours",
+    radarTitle: "Live radar and precipitation forecast",
+    radarSubtitle: "Last 2 hours + next 10 hours",
     layerMap: "Map",
     layerSatellite: "Satellite",
     layerDark: "Dark",
@@ -199,7 +217,7 @@ const copy = {
     severe: "Severe window",
     updatedNever: "Never updated",
     updated: "Updated",
-    loadingRadar: "Loading live radar",
+    loadingRadar: "Loading radar and forecast",
     refresh: "Refresh",
     playRadar: "Play",
     pauseRadar: "Pause",
@@ -207,8 +225,8 @@ const copy = {
     legendLabel: "Precipitation intensity legend",
     looking: "Searching",
     forecast: "Loading forecast...",
-    radar: "Updating live radar...",
-    radarLive: "Live radar",
+    radar: "Updating radar and forecast...",
+    radarOutlook: "Radar + 10 hours",
     synced: "Synced",
     minimum: "Minimal",
     low: "Low",
@@ -322,6 +340,7 @@ const els = {
 let map;
 let marker;
 let baseLayer;
+let weatherMapAdapter;
 let radarLayer;
 const radarLayers = new Set();
 let radarFrames = [];
@@ -894,6 +913,17 @@ function setBaseLayer() {
   baseLayer = L.tileLayer(config.url, config.options).addTo(map);
 }
 
+function updateWeatherMapBounds() {
+  if (!map || !window.OMWeatherMapLayer) return;
+  const bounds = map.getBounds();
+  window.OMWeatherMapLayer.updateCurrentBounds([
+    bounds.getWest(),
+    bounds.getSouth(),
+    bounds.getEast(),
+    bounds.getNorth()
+  ]);
+}
+
 
 function ensureMap(place) {
   if (!map) {
@@ -906,6 +936,21 @@ function ensureMap(place) {
     window.map = map;
     L.control.zoom({ position: "topright" }).addTo(map);
     setBaseLayer();
+    weatherMapAdapter = window.OMWeatherMapLayer?.addLeafletProtocolSupport(L);
+    if (weatherMapAdapter) {
+      const protocolSettings = {
+        ...window.OMWeatherMapLayer.defaultOmProtocolSettings,
+        colorScales: {
+          ...window.OMWeatherMapLayer.defaultOmProtocolSettings.colorScales,
+          precipitation: precipitationColorScale
+        }
+      };
+      weatherMapAdapter.addProtocol("om", window.OMWeatherMapLayer.omProtocol, protocolSettings);
+      map.createPane("weatherPane");
+      map.getPane("weatherPane").classList.add("weatherPane");
+      map.on("moveend", updateWeatherMapBounds);
+      updateWeatherMapBounds();
+    }
   } else {
     map.setView([place.latitude, place.longitude], mapStartZoom);
   }
@@ -924,6 +969,15 @@ function ensureMap(place) {
 }
 
 function createRadarLayer(frame) {
+  if (frame.source === "forecast") {
+    if (!weatherMapAdapter) throw new Error(preferences.language === "it" ? "Livello previsionale non disponibile." : "Forecast layer unavailable.");
+    return weatherMapAdapter.createTileLayer(frame.url, {
+      opacity: 0,
+      maxZoom: 12,
+      pane: "weatherPane",
+      attribution: "Forecast &copy; Open-Meteo, DWD"
+    });
+  }
   return L.tileLayer(frame.url, {
     opacity: 0,
     maxZoom: 16,
@@ -936,25 +990,43 @@ async function loadRadar() {
   const generation = ++radarLoadGeneration;
   stopRadarPlayback();
   els.radarState.textContent = t("loadingRadar");
-  const response = await fetch(radarMetadataUrl);
-  if (!response.ok) throw new Error(preferences.language === "it" ? "Radar live non disponibile." : "Live radar unavailable.");
-  const metadata = await response.json();
+  const [radarResponse, forecastResponse] = await Promise.all([
+    fetch(radarMetadataUrl),
+    fetch(precipitationForecastUrl)
+  ]);
+  if (!radarResponse.ok) throw new Error(preferences.language === "it" ? "Radar live non disponibile." : "Live radar unavailable.");
+  if (!forecastResponse.ok) throw new Error(preferences.language === "it" ? "Previsione precipitazioni non disponibile." : "Precipitation forecast unavailable.");
+  const [metadata, forecastMetadata] = await Promise.all([radarResponse.json(), forecastResponse.json()]);
   if (generation !== radarLoadGeneration) return;
 
   const pastFrames = metadata.radar?.past || [];
   const nowcastFrames = metadata.radar?.nowcast || [];
-  const metadataFrames = [...pastFrames, ...nowcastFrames];
-  if (!metadata.host || !metadataFrames.length) throw new Error(preferences.language === "it" ? "Nessun fotogramma radar disponibile." : "No radar frames available.");
+  const radarMetadataFrames = [...pastFrames, ...nowcastFrames];
+  if (!metadata.host || !pastFrames.length) throw new Error(preferences.language === "it" ? "Nessun fotogramma radar disponibile." : "No radar frames available.");
 
-  radarFrames = metadataFrames.map((frame, index) => ({
+  const latestObservedTime = Number(pastFrames.at(-1).time);
+  const liveFrames = radarMetadataFrames.map((frame, index) => ({
     time: Number(frame.time),
-    isNowcast: index >= pastFrames.length,
+    isObserved: index < pastFrames.length,
+    source: "radar",
     url: `${metadata.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`
   }));
-  els.radarState.textContent = t("radarLive");
+  const forecastFrames = (forecastMetadata.valid_times || [])
+    .map((time, index) => ({ time: Date.parse(time) / 1000, index }))
+    .filter((frame) => frame.time > latestObservedTime && frame.time <= latestObservedTime + 10 * 60 * 60)
+    .map((frame) => ({
+      ...frame,
+      isObserved: false,
+      source: "forecast",
+      url: `om://${precipitationForecastUrl}?time_step=valid_times_${frame.index}&variable=precipitation&dark=${preferences.mapLayer === "dark"}`
+    }));
+  if (!forecastFrames.length) throw new Error(preferences.language === "it" ? "Previsione delle prossime 10 ore non disponibile." : "Next ten-hour forecast unavailable.");
+
+  radarFrames = [...liveFrames, ...forecastFrames].sort((a, b) => a.time - b.time || (a.source === "radar" ? -1 : 1));
+  els.radarState.textContent = t("radarOutlook");
   lastUpdatedAt = new Date(Number(metadata.generated || Date.now() / 1000) * 1000);
   updateLastUpdated();
-  frameIndex = Math.max(0, pastFrames.length - 1);
+  frameIndex = radarFrames.reduce((latestIndex, frame, index) => frame.isObserved ? index : latestIndex, 0);
   els.frameSlider.min = "0";
   els.frameSlider.max = String(Math.max(0, radarFrames.length - 1));
   els.frameSlider.disabled = radarFrames.length <= 1;
@@ -975,7 +1047,12 @@ function formatRadarFrameLabel(frame) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(frame.time * 1000));
-  const latestPastFrame = radarFrames.filter((item) => !item.isNowcast).at(-1) || radarFrames.at(-1);
+  if (frame.source === "forecast") {
+    const firstForecastFrame = radarFrames.find((item) => item.source === "forecast");
+    const forecastHour = Math.round((frame.time - firstForecastFrame.time) / 3600) + 1;
+    return `+${forecastHour}h · ${time}`;
+  }
+  const latestPastFrame = radarFrames.filter((item) => item.isObserved).at(-1) || radarFrames.at(-1);
   const minutes = Math.round((frame.time - latestPastFrame.time) / 60);
   const offset = minutes === 0
     ? preferences.language === "it" ? "Ora" : "Now"
