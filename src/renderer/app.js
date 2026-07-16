@@ -33,6 +33,8 @@ const cloudCoverColorScale = {
     [126, 138, 149, 0.54]
   ]
 };
+const rainViewerRequestsPerMinute = 100;
+const rainViewerPlaybackBudget = Math.floor(rainViewerRequestsPerMinute * 0.75);
 const storageKeys = {
   saved: "hailWatch.savedPlaces",
   prefs: "hailWatch.preferences",
@@ -143,6 +145,7 @@ const copy = {
     refresh: "Aggiorna",
     playRadar: "Riproduci",
     pauseRadar: "Pausa",
+    radarReplayLimited: (seconds) => `Riproduzione limitata a un fotogramma ogni ${seconds} s per rispettare il limite del radar.`,
     mapLayerTitle: "Livello mappa",
     legendLabel: "Legenda intensità precipitazioni",
     looking: "Cerco",
@@ -234,6 +237,7 @@ const copy = {
     refresh: "Refresh",
     playRadar: "Play",
     pauseRadar: "Pause",
+    radarReplayLimited: (seconds) => `Replay limited to one frame every ${seconds}s to respect the radar limit.`,
     mapLayerTitle: "Map layer",
     legendLabel: "Precipitation intensity legend",
     looking: "Searching",
@@ -1106,18 +1110,32 @@ function stopRadarPlayback() {
   if (els.playRadar) els.playRadar.textContent = t("playRadar");
 }
 
+function rainViewerFrameTileCount() {
+  const loadedTiles = radarLayer?.getContainer?.()?.querySelectorAll("img").length;
+  if (loadedTiles) return loadedTiles;
+  const size = map?.getSize();
+  if (!size) return 25;
+  return (Math.ceil(size.x / 256) + 1) * (Math.ceil(size.y / 256) + 1);
+}
+
+function radarPlaybackDelay() {
+  return Math.ceil((rainViewerFrameTileCount() * 60 * 1000) / rainViewerPlaybackBudget);
+}
+
 function toggleRadarPlayback() {
   if (radarFrames.length <= 1) return;
   if (radarPlaybackTimer) {
     stopRadarPlayback();
     return;
   }
+  const playbackDelay = radarPlaybackDelay();
   els.playRadar.setAttribute("aria-pressed", "true");
   els.playRadar.textContent = t("pauseRadar");
+  els.playRadar.title = t("radarReplayLimited")(Math.ceil(playbackDelay / 1000));
   radarPlaybackTimer = setInterval(() => {
     const nextIndex = frameIndex >= radarFrames.length - 1 ? 0 : frameIndex + 1;
     showRadarFrame(nextIndex);
-  }, 850);
+  }, playbackDelay);
 }
 
 function showRadarFrame(index) {

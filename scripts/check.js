@@ -16,6 +16,8 @@ assert.match(js, /https:\/\/map-tiles\.open-meteo\.com\/data_spatial\/dwd_icon\/
 assert.match(js, /forecastMetadata\.valid_times/);
 assert.match(js, /variable=cloud_cover/);
 assert.match(js, /cloudLayer\.setOpacity/);
+assert.match(js, /rainViewerRequestsPerMinute = 100/);
+assert.match(js, /function radarPlaybackDelay\(\)/);
 assert.match(html, /id="playRadar"/);
 assert.match(html, /weather-map-layer/);
 assert.doesNotMatch(html + css + js, /[—–]/);
