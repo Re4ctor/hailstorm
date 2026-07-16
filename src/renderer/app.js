@@ -999,7 +999,7 @@ function createRadarLayer(frame) {
     });
     const forecastLayer = L.layerGroup([cloudLayer, precipitationLayer]);
     forecastLayer.setOpacity = (opacity) => {
-      cloudLayer.setOpacity(opacity * 0.52);
+      cloudLayer.setOpacity(opacity * 0.72);
       precipitationLayer.setOpacity(opacity);
       return forecastLayer;
     };
