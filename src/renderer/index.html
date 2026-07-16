@@ -164,26 +164,28 @@
         <button type="button" class="mobileSidebarToggle" id="mobileSidebarToggle" aria-controls="sidebar" aria-expanded="false">Dati</button>
         <div class="mapTop">
           <div>
-            <span class="overline" id="radarTitle">Previsione precipitazioni</span>
-            <strong id="radarSubtitle">Prossime 2 ore</strong>
+            <span class="overline" id="radarTitle">Radar precipitazioni</span>
+            <strong id="radarSubtitle">Ultime 2 ore</strong>
           </div>
-          <span class="layerState" id="radarState">Previsione</span>
+          <span class="layerState" id="radarState">Radar live</span>
         </div>
         <div class="mapToolbar">
+          <button id="playRadar" type="button" aria-pressed="false" disabled>Riproduci</button>
           <div class="frameControl">
-            <label id="frameLabel" for="frameSlider">Prossime 2 ore</label>
+            <label id="frameLabel" for="frameSlider">Radar live</label>
             <input id="frameSlider" type="range" min="0" max="0" value="0" step="1" disabled />
-            <div class="timeScale" aria-hidden="true"><span>Ora</span><span>+1h</span><span>+2h</span></div>
+            <div class="timeScale" aria-hidden="true"><span id="frameStart">-2h</span><span id="frameMid">-1h</span><span id="frameEnd">Ora</span></div>
           </div>
-          <button id="refreshForecast" title="Aggiorna previsione">Aggiorna</button>
+          <button id="refreshForecast" title="Aggiorna radar">Aggiorna</button>
           <select id="mapLayer" title="Livello mappa">
             <option value="voyager" id="layerMap">Mappa</option>
+            <option value="satellite" id="layerSatellite">Satellite</option>
             <option value="dark" id="layerDark">Scura</option>
             <option value="terrain" id="layerTerrain">Terreno</option>
           </select>
           <label class="opacityControl" for="radarOpacity">
             Livello
-            <input id="radarOpacity" type="range" min="30" max="85" value="64" />
+            <input id="radarOpacity" type="range" min="30" max="90" value="72" />
           </label>
         </div>
         <div class="refreshStamp" id="refreshStamp">Mai aggiornato</div>
@@ -221,7 +223,6 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
-    <script src="https://unpkg.com/@openmeteo/weather-map-layer@0.0.19/dist/index.js"></script>
-    <script src="./app.js?v=meteo-layer"></script>
+    <script src="./app.js?v=live-radar"></script>
   </body>
 </html>

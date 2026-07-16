@@ -890,6 +890,11 @@ h2 {
   opacity: 0.55;
 }
 
+#playRadar[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .frameControl {
   display: grid;
   flex: 1;
@@ -1008,14 +1013,6 @@ h2 {
   transition: opacity var(--transition);
 }
 
-.weatherPane {
-  z-index: 250;
-  pointer-events: none;
-}
-
-.weatherPane canvas {
-  filter: saturate(0.92) contrast(1.06);
-}
 
 .radarLegend {
   right: 16px;
@@ -1053,7 +1050,7 @@ h2 {
   width: 100%;
   height: 7px;
   border-radius: 3px;
-  background: linear-gradient(90deg, #47a6be 0 18%, #3199ae 18% 32%, #298b77 32% 46%, #569e5f 46% 58%, #bfb84a 58% 70%, #de9242 70% 82%, #d35c41 82% 92%, #ae3c46 92% 100%);
+  background: linear-gradient(90deg, #1b63cb 0 18%, #168fe2 18% 35%, #2ed2ec 35% 48%, #f2d54c 48% 62%, #f28b36 62% 76%, #de3c38 76% 89%, #8b2f7d 89% 100%);
 }
 
 /* Critical Leaflet layout rules, kept local so map tiles position correctly offline or when CDN CSS is blocked. */
@@ -1302,7 +1299,7 @@ h2 {
   }
 
   .shell {
-    --mobile-toolbar-clearance: 220px;
+    --mobile-toolbar-clearance: 250px;
     --control-height: 40px;
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
@@ -1563,7 +1560,7 @@ h2 {
     bottom: calc(12px + env(safe-area-inset-bottom));
     left: 12px;
     display: grid;
-    grid-template-columns: 42px 1fr 42px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: auto;
     max-width: none;
     padding: 8px;
@@ -1574,17 +1571,12 @@ h2 {
   .mapToolbar button,
   .mapToolbar select,
   .opacityControl {
+    min-width: 0;
     height: var(--control-height);
   }
 
-  .frameControl,
-  #refreshForecast,
-  #mapLayer,
-  .opacityControl {
-    grid-column: 1 / -1;
-  }
-
   .frameControl {
+    grid-column: 1 / -1;
     min-width: 0;
     padding: 4px 8px;
   }
@@ -1598,11 +1590,14 @@ h2 {
   }
 
   .opacityControl {
+    gap: 4px;
     justify-content: space-between;
   }
 
   .opacityControl input {
-    width: min(180px, 56vw);
+    flex: 1;
+    width: 0;
+    min-width: 0;
   }
 
   .radarLegend {

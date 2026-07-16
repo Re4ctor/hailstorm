@@ -1,24 +1,7 @@
 const geocodeUrl = "https://geocoding-api.open-meteo.com/v1/search";
 const forecastUrl = "https://api.open-meteo.com/v1/forecast";
-const precipitationMapUrl = "https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json";
+const radarMetadataUrl = "https://api.rainviewer.com/public/weather-maps.json";
 const mapStartZoom = 7;
-const precipitationColorScale = {
-  type: "breakpoint",
-  unit: "mm",
-  breakpoints: [0.01, 0.15, 0.5, 1, 2, 4, 7, 10, 15, 25],
-  colors: [
-    [61, 105, 132, 0],
-    [71, 166, 190, 0],
-    [49, 153, 174, 0.3],
-    [41, 139, 119, 0.56],
-    [86, 158, 95, 0.72],
-    [191, 184, 74, 0.82],
-    [222, 146, 66, 0.9],
-    [211, 92, 65, 0.96],
-    [174, 60, 70, 1],
-    [134, 48, 67, 1]
-  ]
-};
 const storageKeys = {
   saved: "hailWatch.savedPlaces",
   prefs: "hailWatch.preferences",
@@ -37,6 +20,14 @@ const mapLayers = {
       maxNativeZoom: 20,
       attribution:
         '&copy; OpenStreetMap contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }
+  },
+  satellite: {
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    options: {
+      maxZoom: 19,
+      maxNativeZoom: 19,
+      attribution: "Tiles &copy; Esri"
     }
   },
   dark: {
@@ -104,9 +95,10 @@ const copy = {
     conditions: "Condizioni",
     hourly: "Rischio orario",
     compare: "Confronto salvati",
-    radarTitle: "Previsione precipitazioni",
-    radarSubtitle: "Prossime 2 ore",
+    radarTitle: "Radar precipitazioni",
+    radarSubtitle: "Ultime 2 ore",
     layerMap: "Mappa",
+    layerSatellite: "Satellite",
     layerDark: "Scura",
     layerTerrain: "Terreno",
     weak: "Debole",
@@ -116,14 +108,16 @@ const copy = {
     severe: "Finestra severa",
     updatedNever: "Mai aggiornato",
     updated: "Aggiornato",
-    loadingRadar: "Caricamento previsione",
+    loadingRadar: "Caricamento radar live",
     refresh: "Aggiorna",
+    playRadar: "Riproduci",
+    pauseRadar: "Pausa",
     mapLayerTitle: "Livello mappa",
     legendLabel: "Legenda intensità precipitazioni",
     looking: "Cerco",
     forecast: "Carico previsione...",
-    radar: "Aggiorno mappa previsionale...",
-    radarForecast: "Previsione",
+    radar: "Aggiorno radar live...",
+    radarLive: "Radar live",
     synced: "Sincronizzato",
     minimum: "Minimo",
     low: "Basso",
@@ -192,9 +186,10 @@ const copy = {
     conditions: "Conditions",
     hourly: "Hourly risk",
     compare: "Saved comparison",
-    radarTitle: "Precipitation forecast",
-    radarSubtitle: "Next 2 hours",
+    radarTitle: "Live precipitation radar",
+    radarSubtitle: "Last 2 hours",
     layerMap: "Map",
+    layerSatellite: "Satellite",
     layerDark: "Dark",
     layerTerrain: "Terrain",
     weak: "Weak",
@@ -204,14 +199,16 @@ const copy = {
     severe: "Severe window",
     updatedNever: "Never updated",
     updated: "Updated",
-    loadingRadar: "Loading forecast",
+    loadingRadar: "Loading live radar",
     refresh: "Refresh",
+    playRadar: "Play",
+    pauseRadar: "Pause",
     mapLayerTitle: "Map layer",
     legendLabel: "Precipitation intensity legend",
     looking: "Searching",
     forecast: "Loading forecast...",
-    radar: "Updating forecast map...",
-    radarForecast: "Forecast",
+    radar: "Updating live radar...",
+    radarLive: "Live radar",
     synced: "Synced",
     minimum: "Minimal",
     low: "Low",
@@ -256,6 +253,10 @@ const els = {
   severeWindow: document.querySelector("#severeWindow"),
   frameLabel: document.querySelector("#frameLabel"),
   frameSlider: document.querySelector("#frameSlider"),
+  playRadar: document.querySelector("#playRadar"),
+  frameStart: document.querySelector("#frameStart"),
+  frameMid: document.querySelector("#frameMid"),
+  frameEnd: document.querySelector("#frameEnd"),
   radarState: document.querySelector("#radarState"),
   savePlace: document.querySelector("#savePlace"),
   savedPlaces: document.querySelector("#savedPlaces"),
@@ -269,6 +270,7 @@ const els = {
   radarTitle: document.querySelector("#radarTitle"),
   radarSubtitle: document.querySelector("#radarSubtitle"),
   layerMap: document.querySelector("#layerMap"),
+  layerSatellite: document.querySelector("#layerSatellite"),
   layerDark: document.querySelector("#layerDark"),
   layerTerrain: document.querySelector("#layerTerrain"),
   legendWeak: document.querySelector("#legendWeak"),
@@ -320,11 +322,11 @@ const els = {
 let map;
 let marker;
 let baseLayer;
-let weatherMapAdapter;
 let radarLayer;
 const radarLayers = new Set();
 let radarFrames = [];
 let frameIndex = 0;
+let radarPlaybackTimer = null;
 let autoRefreshTimer = null;
 let currentPlace = null;
 let currentForecast = null;
@@ -341,16 +343,16 @@ let savedPlaces = readJson(storageKeys.saved, []);
 let preferences = {
   language: "it",
   riskThreshold: 50,
-  radarOpacity: 64,
+  radarOpacity: 72,
   forecastHours: 24,
   forecastDay: 0,
   forecastOffsetHours: 0,
   autoRefresh: 0,
   detailMode: "detailed",
-  mapLayer: "voyager",
+  mapLayer: "satellite",
   ...readJson(storageKeys.prefs, {})
 };
-if ([40, 52].includes(Number(preferences.radarOpacity))) preferences.radarOpacity = 64;
+if ([40, 52, 64].includes(Number(preferences.radarOpacity))) preferences.radarOpacity = 72;
 
 function readJson(key, fallback) {
   try {
@@ -892,16 +894,6 @@ function setBaseLayer() {
   baseLayer = L.tileLayer(config.url, config.options).addTo(map);
 }
 
-function updateWeatherMapBounds() {
-  if (!map || !window.OMWeatherMapLayer) return;
-  const bounds = map.getBounds();
-  window.OMWeatherMapLayer.updateCurrentBounds([
-    bounds.getWest(),
-    bounds.getSouth(),
-    bounds.getEast(),
-    bounds.getNorth()
-  ]);
-}
 
 function ensureMap(place) {
   if (!map) {
@@ -914,21 +906,6 @@ function ensureMap(place) {
     window.map = map;
     L.control.zoom({ position: "topright" }).addTo(map);
     setBaseLayer();
-    if (window.OMWeatherMapLayer) {
-      weatherMapAdapter = window.OMWeatherMapLayer.addLeafletProtocolSupport(L);
-      const protocolSettings = {
-        ...window.OMWeatherMapLayer.defaultOmProtocolSettings,
-        colorScales: {
-          ...window.OMWeatherMapLayer.defaultOmProtocolSettings.colorScales,
-          precipitation: precipitationColorScale
-        }
-      };
-      weatherMapAdapter.addProtocol("om", window.OMWeatherMapLayer.omProtocol, protocolSettings);
-      map.createPane("weatherPane");
-      map.getPane("weatherPane").classList.add("weatherPane");
-      map.on("moveend", updateWeatherMapBounds);
-      updateWeatherMapBounds();
-    }
   } else {
     map.setView([place.latitude, place.longitude], mapStartZoom);
   }
@@ -947,36 +924,42 @@ function ensureMap(place) {
 }
 
 function createRadarLayer(frame) {
-  if (!weatherMapAdapter) throw new Error(preferences.language === "it" ? "Livello previsionale non disponibile." : "Forecast layer unavailable.");
-  return weatherMapAdapter.createTileLayer(frame.url, {
+  return L.tileLayer(frame.url, {
     opacity: 0,
-    maxZoom: 12,
-    pane: "weatherPane",
-    attribution: "Forecast &copy; Open-Meteo, DWD"
+    maxZoom: 16,
+    maxNativeZoom: 7,
+    attribution: 'Radar &copy; <a href="https://www.rainviewer.com/">RainViewer</a>'
   });
 }
 
 async function loadRadar() {
   const generation = ++radarLoadGeneration;
+  stopRadarPlayback();
   els.radarState.textContent = t("loadingRadar");
-  const response = await fetch(precipitationMapUrl);
-  if (!response.ok) throw new Error(preferences.language === "it" ? "Previsione mappa non disponibile." : "Map forecast unavailable.");
+  const response = await fetch(radarMetadataUrl);
+  if (!response.ok) throw new Error(preferences.language === "it" ? "Radar live non disponibile." : "Live radar unavailable.");
   const metadata = await response.json();
   if (generation !== radarLoadGeneration) return;
-  const validTimes = metadata.valid_times || [];
-  if (!validTimes.length) throw new Error(preferences.language === "it" ? "Nessun orario previsionale." : "No forecast times available.");
 
-  const now = Date.now();
-  const startIndex = validTimes.reduce((best, time, index) => Date.parse(time) <= now ? index : best, 0);
-  radarFrames = validTimes.slice(startIndex, startIndex + 3).map((time, offset) => ({
-    time: Date.parse(time) / 1000,
-    url: `om://${precipitationMapUrl}?time_step=valid_times_${startIndex + offset}&variable=precipitation&dark=${preferences.mapLayer === "dark"}`
+  const pastFrames = metadata.radar?.past || [];
+  const nowcastFrames = metadata.radar?.nowcast || [];
+  const metadataFrames = [...pastFrames, ...nowcastFrames];
+  if (!metadata.host || !metadataFrames.length) throw new Error(preferences.language === "it" ? "Nessun fotogramma radar disponibile." : "No radar frames available.");
+
+  radarFrames = metadataFrames.map((frame, index) => ({
+    time: Number(frame.time),
+    isNowcast: index >= pastFrames.length,
+    url: `${metadata.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`
   }));
-  els.radarState.textContent = t("radarForecast");
-  frameIndex = 0;
+  els.radarState.textContent = t("radarLive");
+  lastUpdatedAt = new Date(Number(metadata.generated || Date.now() / 1000) * 1000);
+  updateLastUpdated();
+  frameIndex = Math.max(0, pastFrames.length - 1);
   els.frameSlider.min = "0";
   els.frameSlider.max = String(Math.max(0, radarFrames.length - 1));
   els.frameSlider.disabled = radarFrames.length <= 1;
+  els.playRadar.disabled = radarFrames.length <= 1;
+  updateRadarTimeScale();
   showRadarFrame(frameIndex);
 }
 
@@ -992,11 +975,43 @@ function formatRadarFrameLabel(frame) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(frame.time * 1000));
-  const minutes = Math.max(0, Math.round((frame.time - radarFrames[0].time) / 60));
+  const latestPastFrame = radarFrames.filter((item) => !item.isNowcast).at(-1) || radarFrames.at(-1);
+  const minutes = Math.round((frame.time - latestPastFrame.time) / 60);
   const offset = minutes === 0
     ? preferences.language === "it" ? "Ora" : "Now"
-    : minutes % 60 === 0 ? `+${minutes / 60}h` : `+${minutes} min`;
+    : minutes % 60 === 0 ? `${minutes > 0 ? "+" : "-"}${Math.abs(minutes / 60)}h` : `${minutes > 0 ? "+" : "-"}${Math.abs(minutes)} min`;
   return `${offset} · ${time}`;
+}
+
+function updateRadarTimeScale() {
+  if (!radarFrames.length) return;
+  const last = radarFrames.length - 1;
+  els.frameStart.textContent = formatRadarFrameLabel(radarFrames[0]).split(" · ")[0];
+  els.frameMid.textContent = formatRadarFrameLabel(radarFrames[Math.round(last / 2)]).split(" · ")[0];
+  els.frameEnd.textContent = formatRadarFrameLabel(radarFrames[last]).split(" · ")[0];
+}
+
+function stopRadarPlayback() {
+  if (radarPlaybackTimer) {
+    clearInterval(radarPlaybackTimer);
+    radarPlaybackTimer = null;
+  }
+  els.playRadar?.setAttribute("aria-pressed", "false");
+  if (els.playRadar) els.playRadar.textContent = t("playRadar");
+}
+
+function toggleRadarPlayback() {
+  if (radarFrames.length <= 1) return;
+  if (radarPlaybackTimer) {
+    stopRadarPlayback();
+    return;
+  }
+  els.playRadar.setAttribute("aria-pressed", "true");
+  els.playRadar.textContent = t("pauseRadar");
+  radarPlaybackTimer = setInterval(() => {
+    const nextIndex = frameIndex >= radarFrames.length - 1 ? 0 : frameIndex + 1;
+    showRadarFrame(nextIndex);
+  }, 850);
 }
 
 function showRadarFrame(index) {
@@ -1027,6 +1042,7 @@ function showRadarFrame(index) {
   els.frameSlider.style.setProperty("--frame-progress", `${radarFrames.length > 1 ? (frameIndex / (radarFrames.length - 1)) * 100 : 0}%`);
   els.frameLabel.classList.remove("is-changing");
   requestAnimationFrame(() => els.frameLabel.classList.add("is-changing"));
+  if (frameIndex === radarFrames.length - 1) stopRadarPlayback();
 }
 
 function updateLastUpdated() {
@@ -1092,17 +1108,24 @@ function renderStaticText() {
   els.radarTitle.textContent = t("radarTitle");
   els.radarSubtitle.textContent = t("radarSubtitle");
   els.layerMap.textContent = t("layerMap");
+  els.layerSatellite.textContent = t("layerSatellite");
   els.layerDark.textContent = t("layerDark");
   els.layerTerrain.textContent = t("layerTerrain");
   els.legendWeak.textContent = t("weak");
   els.legendStrong.textContent = t("strong");
   els.refreshForecast.textContent = t("refresh");
+  els.playRadar.textContent = radarPlaybackTimer ? t("pauseRadar") : t("playRadar");
   els.retryForecast.textContent = t("retry");
   els.retryComparison.textContent = t("retry");
   els.mobileSidebarToggle.textContent = document.querySelector(".shell").classList.contains("is-sidebar-open") ? t("sidebarClose") : t("sidebarOpen");
   els.mapLayer.setAttribute("title", t("mapLayerTitle"));
   document.querySelector(".radarLegend").setAttribute("aria-label", t("legendLabel"));
-  if (!radarFrames.length) els.frameLabel.textContent = t("loadingRadar");
+  if (!radarFrames.length) {
+    els.frameLabel.textContent = t("loadingRadar");
+  } else {
+    updateRadarTimeScale();
+    els.frameLabel.textContent = formatRadarFrameLabel(radarFrames[frameIndex]);
+  }
   updateLastUpdated();
 }
 
@@ -1477,7 +1500,9 @@ els.mobileForecastSheet.addEventListener("click", () => {
 els.copyReport.addEventListener("click", copyCurrentReport);
 els.exportReport.addEventListener("click", exportCurrentReport);
 els.renamePlace.addEventListener("click", renameCurrentSavedPlace);
+els.playRadar.addEventListener("click", toggleRadarPlayback);
 els.frameSlider.addEventListener("input", () => {
+  stopRadarPlayback();
   showRadarFrame(Number(els.frameSlider.value));
 });
 els.refreshForecast.addEventListener("click", () => {
