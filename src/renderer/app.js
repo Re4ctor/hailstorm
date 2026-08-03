@@ -36,12 +36,31 @@ const cloudCoverColorScale = {
 const rainViewerRequestsPerMinute = 100;
 const rainViewerPlaybackBudget = Math.floor(rainViewerRequestsPerMinute * 0.75);
 const requestTimeoutMs = 12000;
+const requestRetries = 2;
+const requestBackoffMs = 800;
+const requestMaxBackoffMs = 8000;
+// Kept well under each provider's published ceiling: the app is one of many
+// clients on a shared free tier, and a burst is what gets a key throttled.
+const hostRequestLimits = {
+  "api.open-meteo.com": { perMinute: 60, concurrency: 3 },
+  "geocoding-api.open-meteo.com": { perMinute: 30, concurrency: 2 },
+  "api.rainviewer.com": { perMinute: 20, concurrency: 2 },
+  "map-tiles.open-meteo.com": { perMinute: 20, concurrency: 2 }
+};
+const defaultRequestLimit = { perMinute: 30, concurrency: 2 };
 const forecastFreshMs = 10 * 60 * 1000;
+const comparisonFreshMs = 20 * 60 * 1000;
 const forecastCacheMaxAgeMs = 24 * 60 * 60 * 1000;
 const forecastCacheMaxEntries = 12;
+const geocodeCacheTtlMs = 30 * 60 * 1000;
+const geocodeCacheMaxEntries = 60;
+const radarMetadataTtlMs = 2 * 60 * 1000;
+const suggestionDebounceMs = 340;
 const notifiedMaxAgeMs = 48 * 60 * 60 * 1000;
-const comparisonConcurrency = 4;
+const comparisonConcurrency = 3;
 const radarFrameRevealMs = 8000;
+const radarWarmPlaybackFloorMs = 1200;
+const radarCachedPlaybackMs = 420;
 const storageKeys = {
   saved: "hailWatch.savedPlaces",
   prefs: "hailWatch.preferences",
@@ -300,6 +319,7 @@ const els = {
   riskTime: document.querySelector("#riskTime"),
   scoreRing: document.querySelector("#scoreRing"),
   riskScore: document.querySelector("#riskScore"),
+  riskPanel: document.querySelector("#riskPanel"),
   riskLabel: document.querySelector("#riskLabel"),
   riskUnit: document.querySelector("#riskUnit"),
   severityLabel: document.querySelector("#severityLabel"),
@@ -390,10 +410,13 @@ let weatherMapAdapter;
 let radarLayer;
 let visibleRadarLayer = null;
 const radarLayers = new Set();
+const seenRadarFrames = new Set();
+let framesBuiltForLayer = null;
 let radarFrames = [];
 let frameIndex = 0;
 let radarPlaybackTimer = null;
 let autoRefreshTimer = null;
+let autoRefreshDeferred = false;
 let currentPlace = null;
 let currentForecast = null;
 let lastUpdatedAt = null;
@@ -438,18 +461,105 @@ function writeJson(key, value) {
   }
 }
 
-async function fetchJson(url, errorMessage) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) throw new Error(errorMessage);
-    return await response.json();
-  } catch (error) {
-    throw error.name === "AbortError" ? new Error(errorMessage) : error;
-  } finally {
-    clearTimeout(timeout);
+// One token bucket per host, so a burst of saved places or a fast typist can
+// never outpace the provider limits. Tokens refill continuously; concurrency is
+// capped separately because parallel sockets are what providers notice first.
+const hostBuckets = new Map();
+
+function hostBucket(host) {
+  if (!hostBuckets.has(host)) {
+    const limit = hostRequestLimits[host] || defaultRequestLimit;
+    hostBuckets.set(host, { ...limit, tokens: limit.perMinute, active: 0, waiting: [], refilledAt: Date.now() });
   }
+  return hostBuckets.get(host);
+}
+
+function refillBucket(bucket) {
+  const now = Date.now();
+  const gained = ((now - bucket.refilledAt) / 60000) * bucket.perMinute;
+  if (gained >= 1) {
+    bucket.tokens = Math.min(bucket.perMinute, bucket.tokens + Math.floor(gained));
+    bucket.refilledAt = now;
+  }
+}
+
+function acquireRequestSlot(host) {
+  const bucket = hostBucket(host);
+  return new Promise((resolve) => {
+    const attempt = () => {
+      refillBucket(bucket);
+      if (bucket.tokens >= 1 && bucket.active < bucket.concurrency) {
+        bucket.tokens -= 1;
+        bucket.active += 1;
+        resolve(() => {
+          bucket.active -= 1;
+          bucket.waiting.shift()?.();
+        });
+        return;
+      }
+      // Out of tokens is a timing problem, a busy socket pool is a queue problem.
+      if (bucket.tokens < 1) setTimeout(attempt, Math.ceil(60000 / bucket.perMinute));
+      else bucket.waiting.push(attempt);
+    };
+    attempt();
+  });
+}
+
+function retryDelayMs(response, attempt) {
+  const retryAfter = Number(response?.headers?.get?.("Retry-After"));
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return Math.min(retryAfter * 1000, requestMaxBackoffMs);
+  return Math.min(requestBackoffMs * 2 ** attempt, requestMaxBackoffMs);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestJson(url, errorMessage, signal) {
+  const host = new URL(url, location.href).hostname;
+  for (let attempt = 0; ; attempt += 1) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    const release = await acquireRequestSlot(host);
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    const timeout = setTimeout(abort, requestTimeoutMs);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      // Throttling and provider hiccups are worth waiting out; other failures are not.
+      if ((response.status === 429 || response.status >= 500) && attempt < requestRetries) {
+        await wait(retryDelayMs(response, attempt));
+        continue;
+      }
+      if (!response.ok) throw new Error(errorMessage);
+      return await response.json();
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      const timedOut = error.name === "AbortError";
+      if (attempt < requestRetries && (timedOut || error.name === "TypeError")) {
+        await wait(retryDelayMs(null, attempt));
+        continue;
+      }
+      throw timedOut ? new Error(errorMessage) : error;
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      release();
+    }
+  }
+}
+
+// Identical concurrent requests share one response, so the focused place and the
+// saved comparison cannot fetch the same forecast twice.
+const inflightRequests = new Map();
+
+function fetchJson(url, errorMessage, { signal } = {}) {
+  if (signal) return requestJson(String(url), errorMessage, signal);
+  const key = String(url);
+  if (!inflightRequests.has(key)) {
+    inflightRequests.set(key, requestJson(key, errorMessage).finally(() => inflightRequests.delete(key)));
+  }
+  return inflightRequests.get(key);
 }
 
 function t(key) {
@@ -868,7 +978,8 @@ function renderRisk(place, forecast) {
   els.riskSummary.textContent = `${weatherText(max.weather_code)}. ${Math.round(
     max.precipitation_probability || 0
   )}% ${preferences.language === "it" ? "probabilità pioggia" : "rain probability"}. CAPE ${Math.round(max.cape || 0)} J/kg.`;
-  els.scoreRing.style.setProperty("--risk-color", color);
+  // Set on the card so the ring and the severity chip share one source.
+  els.riskPanel.style.setProperty("--risk-color", color);
   els.scoreRing.style.setProperty("--risk-progress", String(score));
   const severeWindow = findSevereWindow(rows, forecast.timezone);
   els.hourRange.textContent = formatRangeLabel(rows, forecast.timezone);
@@ -938,18 +1049,45 @@ function renderRisk(place, forecast) {
   return true;
 }
 
-async function searchCities(name, count = 5) {
+// Typing "Milano" would otherwise cost a lookup per debounce, then cost them
+// again the moment the user backspaces.
+const geocodeCache = new Map();
+
+function readGeocodeCache(key) {
+  const entry = geocodeCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.at > geocodeCacheTtlMs) {
+    geocodeCache.delete(key);
+    return null;
+  }
+  return entry.results;
+}
+
+function writeGeocodeCache(key, results) {
+  geocodeCache.set(key, { at: Date.now(), results });
+  while (geocodeCache.size > geocodeCacheMaxEntries) geocodeCache.delete(geocodeCache.keys().next().value);
+}
+
+async function searchCities(name, count = 5, { signal } = {}) {
+  const query = name.trim();
+  const cacheKeyValue = `${preferences.language}:${count}:${query.toLowerCase()}`;
+  const cached = readGeocodeCache(cacheKeyValue);
+  if (cached) return cached;
+
   const url = new URL(geocodeUrl);
-  url.searchParams.set("name", name);
+  url.searchParams.set("name", query);
   url.searchParams.set("count", String(count));
   url.searchParams.set("language", preferences.language);
   url.searchParams.set("format", "json");
 
   const data = await fetchJson(
     url,
-    preferences.language === "it" ? "Ricerca non disponibile. Riprova." : "Search unavailable. Try again."
+    preferences.language === "it" ? "Ricerca non disponibile. Riprova." : "Search unavailable. Try again.",
+    { signal }
   );
-  return data.results || [];
+  const results = data.results || [];
+  writeGeocodeCache(cacheKeyValue, results);
+  return results;
 }
 
 async function searchCity(name) {
@@ -993,9 +1131,9 @@ function cacheForecast(place, forecast) {
   if (!writeJson(storageKeys.forecastCache, cache)) writeJson(storageKeys.forecastCache, { [key]: entry });
 }
 
-async function getForecast(place, { force = false } = {}) {
+async function getForecast(place, { force = false, freshMs = forecastFreshMs } = {}) {
   const cached = cachedForecastEntry(place);
-  if (!force && cached && Date.now() - Number(cached.at) < forecastFreshMs) return cached.forecast;
+  if (!force && cached && Date.now() - Number(cached.at) < freshMs) return cached.forecast;
 
   const url = new URL(forecastUrl);
   url.searchParams.set("latitude", place.latitude);
@@ -1122,10 +1260,14 @@ function createRadarLayer(frame) {
   });
 }
 
-async function loadRadar() {
-  const generation = ++radarLoadGeneration;
-  stopRadarPlayback();
-  els.radarState.textContent = t("loadingRadar");
+// Switching the base map only changes tile URLs, so the metadata behind the
+// frame list is reused. RainViewer publishes a new set roughly every 10 minutes.
+let radarMetadataCache = null;
+
+async function loadRadarMetadata(force) {
+  if (!force && radarMetadataCache && Date.now() - radarMetadataCache.at < radarMetadataTtlMs) {
+    return radarMetadataCache;
+  }
   const [metadata, forecastMetadata] = await Promise.all([
     fetchJson(radarMetadataUrl, preferences.language === "it" ? "Radar live non disponibile." : "Live radar unavailable."),
     fetchJson(
@@ -1133,6 +1275,15 @@ async function loadRadar() {
       preferences.language === "it" ? "Previsione precipitazioni non disponibile." : "Precipitation forecast unavailable."
     )
   ]);
+  radarMetadataCache = { at: Date.now(), metadata, forecastMetadata };
+  return radarMetadataCache;
+}
+
+async function loadRadar({ force = false } = {}) {
+  const generation = ++radarLoadGeneration;
+  stopRadarPlayback();
+  els.radarState.textContent = t("loadingRadar");
+  const { metadata, forecastMetadata } = await loadRadarMetadata(force);
   if (generation !== radarLoadGeneration) return;
 
   const pastFrames = metadata.radar?.past || [];
@@ -1159,7 +1310,19 @@ async function loadRadar() {
     }));
   if (!forecastFrames.length) throw new Error(preferences.language === "it" ? "Previsione delle prossime 10 ore non disponibile." : "Next ten-hour forecast unavailable.");
 
-  radarFrames = [...liveFrames, ...forecastFrames].sort((a, b) => a.time - b.time || (a.source === "radar" ? -1 : 1));
+  const nextFrames = [...liveFrames, ...forecastFrames].sort((a, b) => a.time - b.time || (a.source === "radar" ? -1 : 1));
+  // Forecast tile URLs carry the dark flag, so a base map switch invalidates
+  // those cached tiles. Otherwise only drop frames that rolled off the timeline.
+  if (framesBuiltForLayer !== preferences.mapLayer) {
+    seenRadarFrames.clear();
+    framesBuiltForLayer = preferences.mapLayer;
+  } else {
+    const frameTimes = new Set(nextFrames.map((frame) => frame.time));
+    seenRadarFrames.forEach((time) => {
+      if (!frameTimes.has(time)) seenRadarFrames.delete(time);
+    });
+  }
+  radarFrames = nextFrames;
   els.radarState.textContent = t("radarOutlook");
   lastUpdatedAt = new Date(Number(metadata.generated || Date.now() / 1000) * 1000);
   updateLastUpdated();
@@ -1207,7 +1370,7 @@ function updateRadarTimeScale() {
 
 function stopRadarPlayback() {
   if (radarPlaybackTimer) {
-    clearInterval(radarPlaybackTimer);
+    clearTimeout(radarPlaybackTimer);
     radarPlaybackTimer = null;
   }
   els.playRadar?.setAttribute("aria-pressed", "false");
@@ -1222,8 +1385,26 @@ function rainViewerFrameTileCount() {
   return (Math.ceil(size.x / 256) + 1) * (Math.ceil(size.y / 256) + 1);
 }
 
+// The first pass through the timeline pulls tiles at a rate the radar host is
+// happy with. Once a frame has been shown its tiles are in the HTTP cache, so
+// replaying it costs no requests and can run at a watchable speed.
 function radarPlaybackDelay() {
-  return Math.ceil((rainViewerFrameTileCount() * 60 * 1000) / rainViewerPlaybackBudget);
+  if (radarFrames.length && seenRadarFrames.size >= radarFrames.length) return radarCachedPlaybackMs;
+  const budgeted = Math.ceil((rainViewerFrameTileCount() * 60 * 1000) / rainViewerPlaybackBudget);
+  return Math.max(radarWarmPlaybackFloorMs, budgeted);
+}
+
+function scheduleRadarStep() {
+  const playbackDelay = radarPlaybackDelay();
+  els.playRadar.title = playbackDelay > radarCachedPlaybackMs
+    ? t("radarReplayLimited")(Math.ceil(playbackDelay / 1000))
+    : t("pauseRadar");
+  radarPlaybackTimer = setTimeout(() => {
+    const nextIndex = frameIndex >= radarFrames.length - 1 ? 0 : frameIndex + 1;
+    showRadarFrame(nextIndex);
+    // showRadarFrame stops playback at the end of the timeline.
+    if (radarPlaybackTimer) scheduleRadarStep();
+  }, playbackDelay);
 }
 
 function toggleRadarPlayback() {
@@ -1232,14 +1413,9 @@ function toggleRadarPlayback() {
     stopRadarPlayback();
     return;
   }
-  const playbackDelay = radarPlaybackDelay();
   els.playRadar.setAttribute("aria-pressed", "true");
   els.playRadar.textContent = t("pauseRadar");
-  els.playRadar.title = t("radarReplayLimited")(Math.ceil(playbackDelay / 1000));
-  radarPlaybackTimer = setInterval(() => {
-    const nextIndex = frameIndex >= radarFrames.length - 1 ? 0 : frameIndex + 1;
-    showRadarFrame(nextIndex);
-  }, playbackDelay);
+  scheduleRadarStep();
 }
 
 function discardRadarLayer(layer) {
@@ -1284,6 +1460,7 @@ function showRadarFrame(index) {
     }
     nextLayer.setOpacity(Number(preferences.radarOpacity) / 100);
     visibleRadarLayer = nextLayer;
+    seenRadarFrames.add(frame.time);
     radarLayers.forEach((layer) => {
       if (layer !== nextLayer) discardRadarLayer(layer);
     });
@@ -1317,6 +1494,13 @@ function applyDetailMode() {
   document.body.classList.toggle("is-compact", preferences.detailMode === "compact");
 }
 
+function runAutoRefresh() {
+  if (currentPlace) loadPlace(currentPlace, { force: true });
+  else refreshSavedComparison();
+}
+
+// A tab left open in the background used to keep polling every 10 minutes for
+// data nobody was looking at. Refresh is deferred until the tab is seen again.
 function configureAutoRefresh() {
   if (autoRefreshTimer) {
     clearInterval(autoRefreshTimer);
@@ -1325,8 +1509,11 @@ function configureAutoRefresh() {
   const minutes = Number(preferences.autoRefresh || 0);
   if (minutes > 0) {
     autoRefreshTimer = setInterval(() => {
-      if (currentPlace) loadPlace(currentPlace, { force: true });
-      else refreshSavedComparison();
+      if (document.hidden || navigator.onLine === false) {
+        autoRefreshDeferred = true;
+        return;
+      }
+      runAutoRefresh();
     }, minutes * 60 * 1000);
   }
 }
@@ -1457,7 +1644,8 @@ async function refreshSavedComparison() {
     while (queue.length && generation === comparisonGeneration) {
       const { place, index } = queue.shift();
       try {
-        const forecast = await getForecast(place);
+        // Background list entries tolerate older data than the focused place.
+        const forecast = await getForecast(place, { freshMs: comparisonFreshMs });
         const visibleRows = selectedRows(getHourlyRows(forecast));
         if (!visibleRows.length) throw new Error(t("forecastError"));
         const max = visibleRows.reduce((best, row) => (row.score > best.score ? row : best), visibleRows[0]);
@@ -1551,7 +1739,7 @@ async function loadPlace(place, { force = false } = {}) {
     writeJson(storageKeys.lastPlace, place);
 
     setStatus(t("radar"));
-    await loadRadar();
+    await loadRadar({ force });
     if (generation !== loadGeneration) return;
     setStatus(`${t("synced")} ${place.name}`);
     refreshSavedComparison();
@@ -1692,8 +1880,11 @@ function renameCurrentSavedPlace() {
 }
 
 let suggestionTimer = null;
+let suggestionController = null;
 function queueSuggestions() {
   clearTimeout(suggestionTimer);
+  // Cancel the superseded lookup instead of paying for a response nobody reads.
+  suggestionController?.abort();
   const generation = ++suggestionGeneration;
   const query = els.cityInput.value.trim();
   if (query.length < 3) {
@@ -1701,8 +1892,10 @@ function queueSuggestions() {
     return;
   }
   suggestionTimer = setTimeout(async () => {
+    const controller = new AbortController();
+    suggestionController = controller;
     try {
-      const suggestions = await searchCities(query, 5);
+      const suggestions = await searchCities(query, 5, { signal: controller.signal });
       if (generation !== suggestionGeneration) return;
       searchSuggestions = suggestions;
       els.suggestions.innerHTML = searchSuggestions
@@ -1714,8 +1907,10 @@ function queueSuggestions() {
         .join("");
     } catch {
       if (generation === suggestionGeneration) els.suggestions.innerHTML = "";
+    } finally {
+      if (suggestionController === controller) suggestionController = null;
     }
-  }, 260);
+  }, suggestionDebounceMs);
 }
 
 els.form.addEventListener("submit", (event) => {
@@ -1848,6 +2043,16 @@ els.mapLayer.addEventListener("change", () => {
 });
 window.addEventListener("resize", () => {
   if (map) map.invalidateSize();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || !autoRefreshDeferred || navigator.onLine === false) return;
+  autoRefreshDeferred = false;
+  runAutoRefresh();
+});
+window.addEventListener("online", () => {
+  if (!autoRefreshDeferred) return;
+  autoRefreshDeferred = false;
+  runAutoRefresh();
 });
 window.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();

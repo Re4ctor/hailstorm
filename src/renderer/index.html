@@ -101,24 +101,22 @@
           <button type="button" id="retryForecast" hidden>Riprova</button>
         </section>
 
-        <section class="riskPanel forecastSurface" aria-live="polite">
-          <div class="riskHeader">
-            <div>
-              <span id="severityLabel">Gravità</span>
-              <strong id="riskLabel">Caricamento</strong>
-            </div>
-            <div>
-              <span id="peakLabel">Picco</span>
-              <strong id="riskTime">Prossime 24 ore</strong>
-            </div>
+        <section class="riskPanel forecastSurface" id="riskPanel" aria-live="polite">
+          <div class="cardHead">
+            <span class="cardLabel" id="severityLabel">Gravità</span>
+            <span class="riskChip" id="riskChip"><strong id="riskLabel">Caricamento</strong></span>
           </div>
-          <div class="riskScore">
+          <div class="riskHero">
             <div class="scoreRing" id="scoreRing">
               <span id="riskScore">--</span>
               <small id="riskUnit">rischio</small>
             </div>
-            <div>
+            <div class="riskHeroCopy">
               <p id="riskSummary">Analisi delle condizioni temporalesche...</p>
+              <div class="peakRow">
+                <span id="peakLabel">Picco</span>
+                <strong id="riskTime">Prossime 24 ore</strong>
+              </div>
             </div>
           </div>
           <div class="riskExplain" id="riskExplain"></div>

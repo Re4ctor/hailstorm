@@ -1,37 +1,70 @@
 :root {
   color-scheme: dark;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --bg: #101215;
-  --panel: #15181c;
-  --panel-soft: #1c2025;
-  --field: #111418;
-  --line: rgb(255 255 255 / 16%);
-  --line-soft: rgb(255 255 255 / 9%);
-  --text: #f2f5f2;
-  --muted: #969ea3;
-  --muted-2: #c0c7cb;
-  --accent: #cf7b52;
-  --accent-soft: rgb(207 123 82 / 12%);
-  --accent-border: rgb(207 123 82 / 52%);
-  --danger: #e0646e;
-  --danger-soft: rgb(224 100 110 / 12%);
-  --danger-border: rgb(224 100 110 / 44%);
-  --risk-neutral: #969ea3;
-  --risk-active-text: #efc5b1;
+  --bg: #0b0d10;
+  --panel: #12151a;
+  --panel-soft: #191d23;
+  --surface: #15191f;
+  --surface-hover: #1c2128;
+  --field: #0e1115;
+  --line: rgb(255 255 255 / 11%);
+  --line-soft: rgb(255 255 255 / 6%);
+  --line-strong: rgb(255 255 255 / 18%);
+  --text: #eef1f5;
+  --muted: #8d959e;
+  --muted-2: #c2c9d1;
+  --accent: #e08a5c;
+  --accent-strong: #f0a077;
+  --accent-soft: rgb(224 138 92 / 13%);
+  --accent-border: rgb(224 138 92 / 50%);
+  --danger: #e86b76;
+  --danger-soft: rgb(232 107 118 / 13%);
+  --danger-border: rgb(232 107 118 / 46%);
+  --risk-neutral: #8d959e;
+  --risk-active-text: #f3cdb6;
   --map-bg: #dbe5e9;
   --map-text: #edf1ee;
   --light-surface: #f4f6f4;
   --light-text: #151a1f;
   --light-muted: #5d686f;
-  --track: #252b30;
+  --track: #232830;
+  --glass: rgb(15 18 22 / 74%);
+  --glass-light: rgb(247 249 250 / 82%);
+  --glass-line: rgb(255 255 255 / 13%);
+  --focus: rgb(224 138 92 / 70%);
   --control-height: 32px;
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
   --font-label: 11px;
   --font-caption: 12px;
   --font-body: 13px;
   --font-heading: 15px;
   --font-score: 24px;
-  --shadow: 0 2px 8px rgb(0 0 0 / 20%);
-  --transition: 160ms ease;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 26%);
+  --shadow: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 26%);
+  --transition: 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Numbers that change in place should not shift width while doing it. */
+.metric strong,
+.insightItem strong,
+.hour strong,
+.compareItem strong,
+.savedChip strong,
+.reason strong,
+.scoreRing span,
+.sheetScore,
+.legendTicks,
+.timeScale,
+#hourRange,
+.refreshStamp {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 * {
@@ -78,12 +111,25 @@ select {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-height: 0;
   padding: 16px;
   overflow: auto;
   background: var(--panel);
   border-right: 1px solid var(--line);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.panel::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--line);
+  background-clip: content-box;
 }
 
 .panel::before {
@@ -111,9 +157,10 @@ p {
 }
 
 h1 {
-  font-size: var(--font-heading);
+  font-size: 17px;
   line-height: 1.15;
-  font-weight: 680;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
 .brand p,
@@ -130,19 +177,40 @@ h1 {
   white-space: nowrap;
 }
 
+/* Section labels share the uppercase overline treatment so every card in the
+   panel is introduced the same way. */
 .search label,
 .sectionTitle,
+.savedHead > span,
 .timelineHead span {
   display: block;
-  color: var(--muted-2);
+  color: var(--muted);
   font-size: var(--font-label);
   font-weight: 650;
-  letter-spacing: 0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.timelineHead span,
+#hourRange {
+  letter-spacing: 0.02em;
   text-transform: none;
 }
 
+.sectionTitle {
+  margin-bottom: 10px;
+}
+
+.conditions,
+.timeline,
+.compareBlock {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: var(--surface);
+}
+
 .search,
-.riskPanel,
 .conditions,
 .timeline,
 .compareBlock,
@@ -157,6 +225,15 @@ h1 {
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+#cityInput {
+  padding-left: 31px;
+  background-color: var(--field);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cg fill='none' stroke='%238d959e' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.4'/%3E%3Cpath d='M10.4 10.4 14 14'/%3E%3C/g%3E%3C/svg%3E");
+  background-position: 10px center;
+  background-repeat: no-repeat;
+  background-size: 14px;
 }
 
 .searchRow {
@@ -202,7 +279,8 @@ h1 {
   align-items: center;
   width: 100%;
   min-height: var(--control-height);
-  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
   color: var(--muted-2);
   text-align: left;
 }
@@ -225,11 +303,17 @@ input {
   min-width: 0;
   height: var(--control-height);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
   background: var(--field);
   color: var(--text);
+  font-size: var(--font-body);
   outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+input::placeholder {
+  color: var(--muted);
 }
 
 input:focus {
@@ -241,11 +325,22 @@ select {
   min-width: 0;
   height: var(--control-height);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 8px;
-  background: var(--field);
+  border-radius: var(--radius-sm);
+  padding: 0 26px 0 9px;
+  background-color: var(--field);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%238d959e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 9px center;
+  background-repeat: no-repeat;
+  background-size: 10px;
   color: var(--text);
+  font-size: var(--font-caption);
   outline: none;
+  transition: border-color var(--transition), background-color var(--transition);
+  appearance: none;
+}
+
+select:hover {
+  border-color: var(--line-strong);
 }
 
 select:focus {
@@ -256,20 +351,37 @@ select:focus {
 button {
   height: var(--control-height);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 0 12px;
   background: var(--panel-soft);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--font-caption);
   font-weight: 650;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color var(--transition), border-color var(--transition);
+  transition: background-color var(--transition), border-color var(--transition), color var(--transition);
 }
 
 button:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+}
+
+button:active {
+  transform: translateY(0.5px);
+}
+
+/* The submit action carries the accent so the panel has one clear primary. */
+.searchRow button[type="submit"] {
   border-color: var(--accent-border);
   background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.searchRow button[type="submit"]:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
 }
 
 .savedHead {
@@ -302,8 +414,10 @@ button:hover {
   gap: 8px;
   max-width: 142px;
   height: var(--control-height);
-  padding: 0 8px;
+  border-radius: 999px;
+  padding: 0 11px;
   color: var(--muted-2);
+  font-size: var(--font-caption);
 }
 
 .savedChip span {
@@ -321,6 +435,7 @@ button:hover {
 .savedChip.is-active {
   border-color: var(--accent-border);
   background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 
 .emptySaved {
@@ -473,32 +588,97 @@ button:hover {
 }
 
 .riskPanel {
-  padding: 12px 0;
-  border-top: 1px solid var(--line-soft);
-  border-bottom: 1px solid var(--line-soft);
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 14px;
+  background:
+    radial-gradient(120% 80% at 0% 0%, var(--accent-soft), transparent 62%),
+    var(--surface);
 }
 
-.riskHeader {
+.cardHead {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 12px;
-  color: var(--muted);
-  font-size: 11px;
 }
 
-.riskHeader div {
+.cardLabel {
+  color: var(--muted);
+  font-size: var(--font-label);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Severity reads as a status pill in the risk colour rather than a bare word. */
+.riskChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--risk-color, var(--risk-neutral)) 45%, transparent);
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: color-mix(in srgb, var(--risk-color, var(--risk-neutral)) 15%, transparent);
+  color: var(--risk-color, var(--risk-neutral));
+  font-size: var(--font-label);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.riskChip::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--risk-color, var(--risk-neutral)) 22%, transparent);
+}
+
+.riskChip strong {
+  overflow: hidden;
+  font-weight: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.riskHero {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.riskHeroCopy {
+  display: grid;
+  gap: 8px;
   min-width: 0;
 }
 
-.riskHeader div:last-child {
-  text-align: right;
+.peakRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 8px;
+  color: var(--muted);
+  font-size: var(--font-label);
 }
 
-.riskHeader span,
+.peakRow strong {
+  color: var(--muted-2);
+  font-size: var(--font-caption);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
 .metric span {
   min-width: 0;
-  padding-right: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -519,45 +699,30 @@ button:hover {
   font-size: 11px;
 }
 
-.riskHeader strong {
-  display: block;
-  margin-top: 4px;
-  overflow: hidden;
-  color: var(--muted-2);
-  font-size: 12px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.riskScore {
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 12px;
-  align-items: center;
-}
-
 /* The score is the headline number, so the ring doubles as a 0-100 gauge. */
 .scoreRing {
   position: relative;
   display: grid;
   place-items: center;
-  width: 64px;
-  height: 64px;
+  width: 80px;
+  height: 80px;
   border: 0;
   border-radius: 50%;
   background: conic-gradient(
+    from 180deg,
     var(--risk-color, var(--risk-neutral)) calc(var(--risk-progress, 0) * 1%),
     var(--track) 0
   );
+  box-shadow: 0 0 0 1px var(--line-soft) inset;
 }
 
 .scoreRing::after {
   content: "";
   position: absolute;
-  inset: 5px;
+  inset: 6px;
   border-radius: 50%;
-  background: var(--panel);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line-soft);
 }
 
 .scoreRing span,
@@ -568,18 +733,19 @@ button:hover {
 
 .scoreRing span {
   color: var(--text);
-  font-size: 21px;
+  font-size: 24px;
   line-height: 1;
-  font-weight: 720;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
 .scoreRing small {
-  margin-top: 1px;
+  margin-top: 3px;
   color: var(--muted);
   font-size: 9px;
   line-height: 1;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -590,16 +756,15 @@ h2 {
   font-weight: 720;
 }
 
-.riskScore p {
+.riskHeroCopy p {
   color: var(--muted-2);
-  font-size: 12px;
-  line-height: 1.38;
+  font-size: var(--font-caption);
+  line-height: 1.45;
 }
 
 .riskExplain {
   display: grid;
   gap: 0;
-  margin-top: 12px;
   border-top: 1px solid var(--line-soft);
 }
 
@@ -607,14 +772,14 @@ h2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 8px;
 }
 
 .insightItem {
   min-width: 0;
   border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: rgb(255 255 255 / 2%);
 }
 
 .insightItem span {
@@ -638,7 +803,6 @@ h2 {
   align-items: center;
   align-self: start;
   gap: 6px;
-  margin-top: 10px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   padding: 6px 10px;
@@ -668,10 +832,14 @@ h2 {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
-  min-height: 28px;
+  min-height: 30px;
   border-bottom: 1px solid var(--line-soft);
   color: var(--muted-2);
-  font-size: 11px;
+  font-size: var(--font-label);
+}
+
+.reason:last-child {
+  border-bottom: 0;
 }
 
 .reason span {
@@ -682,32 +850,45 @@ h2 {
 }
 
 .reason strong {
-  color: var(--text);
-  font-size: 12px;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: var(--font-label);
+  font-weight: 680;
 }
 
 .metrics {
   display: grid;
-  border-top: 1px solid var(--line-soft);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .metric {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  min-height: 36px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line-soft);
+  gap: 3px;
+  align-content: start;
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  background: var(--panel-soft);
+  transition: border-color var(--transition);
+}
+
+.metric:hover {
+  border-color: var(--line);
 }
 
 .metric strong {
   display: block;
+  overflow: hidden;
   color: var(--text);
-  font-size: 13px;
-  line-height: 1.16;
-  font-weight: 690;
-  text-align: right;
+  font-size: var(--font-body);
+  line-height: 1.2;
+  font-weight: 660;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .timeline {
@@ -758,12 +939,14 @@ h2 {
 }
 
 .severeWindow {
-  margin-bottom: 8px;
-  padding: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
   border: 1px solid var(--line-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
+  background: rgb(255 255 255 / 2%);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-label);
+  line-height: 1.35;
 }
 
 .severeWindow.is-active {
@@ -821,32 +1004,53 @@ h2 {
 .hour {
   display: grid;
   /* Wide enough for the English "today 12:00 PM" form without wrapping. */
-  grid-template-columns: 96px 1fr 32px;
-  gap: 8px;
+  grid-template-columns: 96px 1fr 30px;
+  gap: 10px;
   align-items: center;
+  border-radius: 7px;
+  padding: 3px 6px 3px 4px;
   color: var(--muted-2);
-  font-size: 12px;
+  font-size: var(--font-caption);
+  transition: background-color var(--transition);
+}
+
+.hour:hover {
+  background: rgb(255 255 255 / 4%);
+}
+
+.hour strong {
+  color: var(--text);
+  font-size: var(--font-caption);
+  font-weight: 660;
+  text-align: right;
 }
 
 .bars {
   display: grid;
-  gap: 4px;
+  gap: 3px;
+}
+
+.bar.is-storm {
+  height: 3px;
+  background: rgb(255 255 255 / 7%);
 }
 
 .bar.is-storm .fill {
-  background: var(--muted-2);
+  background: rgb(194 201 209 / 55%);
 }
 
 .hour.is-severe {
+  background: var(--accent-soft);
+  color: var(--risk-active-text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.hour.is-severe strong {
   color: var(--risk-active-text);
 }
 
-.hour.is-severe .bar {
-  background: var(--accent-soft);
-}
-
 .bar {
-  height: 6px;
+  height: 7px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--track);
@@ -854,9 +1058,10 @@ h2 {
 
 .fill {
   height: 100%;
-  min-width: 2px;
+  min-width: 3px;
   border-radius: inherit;
   background: var(--risk-neutral);
+  transition: width var(--transition);
 }
 
 .note {
@@ -894,9 +1099,16 @@ h2 {
   gap: 12px;
   width: 100%;
   min-height: var(--control-height);
-  padding: 8px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
   color: var(--muted-2);
+  font-size: var(--font-caption);
   text-align: left;
+}
+
+.compareItem strong {
+  font-size: var(--font-body);
+  font-weight: 680;
 }
 
 .compareItem span {
@@ -932,14 +1144,18 @@ h2 {
   background: var(--map-bg);
 }
 
+/* Frosted overlays keep the map readable underneath while the controls stay
+   legible on both bright satellite imagery and dark basemaps. */
 .mapTop,
 .mapToolbar,
 .radarLegend {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgb(21 24 28 / 96%);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius);
+  background: var(--glass);
   color: var(--map-text);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
 }
 
 .mapTop {
@@ -1028,19 +1244,20 @@ h2 {
   min-width: 38px;
   height: var(--control-height);
   padding: 0 12px;
-  border-color: var(--line);
-  background: var(--panel-soft);
+  border-color: var(--glass-line);
+  background: rgb(255 255 255 / 7%);
   color: var(--map-text);
 }
 
 .mapToolbar select {
   height: var(--control-height);
-  border-color: var(--line);
-  background: var(--panel-soft);
+  border-color: var(--glass-line);
+  background-color: rgb(255 255 255 / 7%);
   color: var(--map-text);
 }
 
 .mapToolbar button:hover {
+  border-color: var(--accent-border);
   background: var(--accent-soft);
 }
 
@@ -1136,12 +1353,12 @@ h2 {
   align-items: center;
   gap: 8px;
   height: var(--control-height);
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel-soft);
+  padding: 0 10px;
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius-sm);
+  background: rgb(255 255 255 / 7%);
   color: var(--muted-2);
-  font-size: 12px;
+  font-size: var(--font-caption);
 }
 
 .opacityControl input {
@@ -1307,11 +1524,13 @@ h2 {
 
 .leaflet-control-zoom {
   margin: 16px;
-  border: 1px solid rgb(16 20 24 / 12%);
-  border-radius: 8px;
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  background: rgb(248 250 248 / 96%);
+  background: var(--glass);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
 }
 
 .leaflet-control-zoom a {
@@ -1319,14 +1538,20 @@ h2 {
   place-items: center;
   width: var(--control-height);
   height: var(--control-height);
-  color: var(--light-text);
+  background: transparent;
+  color: var(--map-text);
   text-decoration: none;
-  font-size: 20px;
-  font-weight: 760;
+  font-size: 18px;
+  font-weight: 700;
+  transition: background-color var(--transition);
+}
+
+.leaflet-control-zoom a:hover {
+  background: rgb(255 255 255 / 9%);
 }
 
 .leaflet-control-zoom a + a {
-  border-top: 1px solid rgb(16 20 24 / 10%);
+  border-top: 1px solid var(--glass-line);
 }
 
 .leaflet-popup {
@@ -1400,10 +1625,12 @@ h2 {
 .cityMarkerLabel {
   max-width: 156px;
   overflow: hidden;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgb(21 24 28 / 96%);
+  padding: 7px 9px;
+  border: 1px solid var(--glass-line);
+  border-radius: 999px;
+  background: var(--glass);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
   color: var(--text);
   box-shadow: var(--shadow);
   font-size: 13px;
@@ -1415,10 +1642,11 @@ h2 {
 }
 
 .leaflet-control-attribution {
-  padding: 2px 4px;
-  background: rgb(255 255 255 / 72%);
+  padding: 2px 6px;
+  border-radius: 6px 0 0;
+  background: rgb(255 255 255 / 66%);
   color: var(--light-muted);
-  font-size: var(--font-label);
+  font-size: 10px;
 }
 
 /* Below this width the map leads and the panel becomes a drawer. Stacking the
@@ -1486,10 +1714,13 @@ h2 {
     min-width: 64px;
     height: var(--control-height);
     padding: 0 12px;
-    border-color: rgb(16 20 24 / 14%);
-    background: rgb(248 250 248 / 94%);
-    color: var(--light-text);
+    border-color: var(--glass-line);
+    border-radius: var(--radius-sm);
+    background: var(--glass);
+    color: var(--map-text);
     box-shadow: var(--shadow);
+    backdrop-filter: blur(16px) saturate(1.3);
+    -webkit-backdrop-filter: blur(16px) saturate(1.3);
   }
 
   .mobileSidebarToggle::before {
@@ -1507,13 +1738,15 @@ h2 {
     height: auto;
     display: grid;
     gap: 8px;
-    border: 1px solid rgb(16 20 24 / 12%);
-    border-radius: 8px;
-    padding: 8px 12px;
-    background: rgb(248 250 248 / 96%);
-    color: var(--light-text);
+    border: 1px solid var(--glass-line);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    background: var(--glass);
+    color: var(--map-text);
     text-align: left;
     box-shadow: var(--shadow);
+    backdrop-filter: blur(16px) saturate(1.3);
+    -webkit-backdrop-filter: blur(16px) saturate(1.3);
   }
 
   .sheetHandle {
@@ -1521,7 +1754,7 @@ h2 {
     width: 34px;
     height: 4px;
     border-radius: 999px;
-    background: rgb(16 20 24 / 18%);
+    background: rgb(255 255 255 / 22%);
   }
 
   .sheetTop {
@@ -1535,7 +1768,7 @@ h2 {
   .sheetMore span {
     display: block;
     overflow: hidden;
-    color: var(--light-muted);
+    color: var(--muted);
     font-size: 12px;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1545,7 +1778,7 @@ h2 {
     display: block;
     margin-top: 2px;
     overflow: hidden;
-    color: var(--light-text);
+    color: var(--text);
     font-size: var(--font-body);
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1605,27 +1838,22 @@ h2 {
     flex: 0 0 auto;
   }
 
-  .riskHeader,
-  .riskScore {
-    gap: 8px;
-  }
-
-  .riskHeader strong {
-    max-width: 136px;
-  }
-
-  .riskScore {
-    grid-template-columns: 58px 1fr;
+  .riskHero {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
   }
 
   .scoreRing {
-    width: 52px;
-    height: 44px;
-    padding-left: 8px;
+    width: 64px;
+    height: 64px;
+  }
+
+  .scoreRing span {
+    font-size: 22px;
   }
 
   .insightPanel {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .timeline {
@@ -1768,9 +1996,13 @@ h2 {
 /* On phones the map header has to stay one compact line, so the section name
    gives way to the range it describes. */
 @media (max-width: 720px) {
+  /* Stacking gives the range label the full width, so it reads in full instead
+     of being ellipsized next to the update stamp. */
   .mapTop {
-    gap: 10px;
-    padding: 8px 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    padding: 7px 10px;
   }
 
   .mapTop .overline {
@@ -1779,6 +2011,12 @@ h2 {
 
   .mapTopMain {
     overflow: hidden;
+    max-width: 100%;
+  }
+
+  .mapTopMeta {
+    justify-items: start;
+    text-align: left;
   }
 
   .mapTop strong {
