@@ -329,12 +329,55 @@ button:hover {
   font-size: 11px;
 }
 
+/* Settings collapse by default so the risk score and hourly outlook, not six
+   dropdowns, occupy the top of the panel. */
+.settingsBlock {
+  margin-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.settingsBlock summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+}
+
+.settingsBlock summary::-webkit-details-marker {
+  display: none;
+}
+
+.settingsBlock summary::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--transition);
+}
+
+.settingsBlock[open] summary::before {
+  transform: rotate(45deg);
+}
+
+.settingsBlock summary:hover {
+  color: var(--text);
+}
+
 .settingGrid {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 8px;
   align-items: center;
-  margin-top: 8px;
+  margin-top: 4px;
   color: var(--muted);
   font-size: 11px;
 }
@@ -494,29 +537,49 @@ button:hover {
   align-items: center;
 }
 
+/* The score is the headline number, so the ring doubles as a 0-100 gauge. */
 .scoreRing {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  width: 58px;
-  height: 46px;
-  padding-left: 8px;
-  border-left: 3px solid var(--risk-color, var(--risk-neutral));
-  background: transparent !important;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--risk-color, var(--risk-neutral)) calc(var(--risk-progress, 0) * 1%),
+    var(--track) 0
+  );
+}
+
+.scoreRing::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: var(--panel);
+}
+
+.scoreRing span,
+.scoreRing small {
+  position: relative;
+  z-index: 1;
 }
 
 .scoreRing span {
   color: var(--text);
-  font-size: var(--font-score);
+  font-size: 21px;
   line-height: 1;
-  font-weight: 700;
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
 }
 
 .scoreRing small {
-  margin-top: 4px;
+  margin-top: 1px;
   color: var(--muted);
-  font-size: var(--font-label);
+  font-size: 9px;
   line-height: 1;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
@@ -571,14 +634,32 @@ h2 {
 }
 
 .warningLink {
-  display: inline-block;
-  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  align-self: start;
+  gap: 6px;
+  margin-top: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 6px 10px;
   color: var(--muted-2);
   font-size: 11px;
+  font-weight: 620;
   text-decoration: none;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.warningLink::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-top: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  transform: rotate(45deg);
 }
 
 .warningLink:hover {
+  border-color: var(--accent-border);
   color: var(--text);
 }
 
@@ -640,10 +721,21 @@ h2 {
 
 .timelineHead {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   margin-bottom: 8px;
+}
+
+/* Wrapping the whole control below the title beats wrapping inside both. */
+.timelineHead .sectionTitle,
+#hourRange {
+  white-space: nowrap;
+}
+
+#hourRange {
+  font-variant-numeric: tabular-nums;
 }
 
 .forecastWindowControl {
@@ -686,6 +778,36 @@ h2 {
   text-transform: none;
 }
 
+/* The hourly rows stack two bars, which reads as noise without a key. */
+.barKey {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: var(--font-label);
+}
+
+.barKeyItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.barKeyItem::before {
+  content: "";
+  width: 14px;
+  height: 4px;
+  border-radius: 999px;
+}
+
+.barKeyItem.is-risk::before {
+  background: var(--accent);
+}
+
+.barKeyItem.is-storm::before {
+  background: var(--muted-2);
+}
+
 .hours {
   display: grid;
   gap: 8px;
@@ -698,7 +820,8 @@ h2 {
 
 .hour {
   display: grid;
-  grid-template-columns: 80px 1fr 32px;
+  /* Wide enough for the English "today 12:00 PM" form without wrapping. */
+  grid-template-columns: 96px 1fr 32px;
   gap: 8px;
   align-items: center;
   color: var(--muted-2);
@@ -812,8 +935,6 @@ h2 {
 .mapTop,
 .mapToolbar,
 .radarLegend {
-  position: absolute;
-  z-index: 500;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgb(21 24 28 / 96%);
@@ -822,14 +943,48 @@ h2 {
 }
 
 .mapTop {
+  position: absolute;
   top: 16px;
   left: 16px;
+  z-index: 500;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 22px;
   min-width: 230px;
   padding: 12px;
+}
+
+.mapTopMain {
+  min-width: 0;
+}
+
+.mapTopMeta {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* The map overlays share one bottom stack so they cannot overlap each other
+   at any width, and no clearance offsets need to be kept in sync. */
+.mapBottom {
+  position: absolute;
+  right: 0;
+  bottom: 26px;
+  left: 0;
+  z-index: 500;
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  width: min(860px, calc(100% - 40px));
+  margin: 0 auto;
+  pointer-events: none;
+}
+
+.mapBottom > * {
+  pointer-events: auto;
 }
 
 .overline {
@@ -854,14 +1009,19 @@ h2 {
 }
 
 .mapToolbar {
-  bottom: 20px;
-  left: 50%;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  width: min(680px, calc(100% - 40px));
+  width: 100%;
+  min-width: 0;
   padding: 12px;
-  transform: translateX(-50%);
+}
+
+#mapLayer {
+  width: auto;
+  min-width: 104px;
+  padding-right: 4px;
 }
 
 .mapToolbar button {
@@ -897,9 +1057,9 @@ h2 {
 
 .frameControl {
   display: grid;
-  flex: 1;
+  flex: 1 1 260px;
   gap: 4px;
-  min-width: 260px;
+  min-width: 240px;
   padding: 0 8px;
 }
 
@@ -992,17 +1152,8 @@ h2 {
 }
 
 .refreshStamp {
-  position: absolute;
-  top: 76px;
-  left: 16px;
-  z-index: 500;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px;
-  background: rgb(21 24 28 / 96%);
-  color: var(--muted-2);
-  font-size: 12px;
-  box-shadow: var(--shadow);
+  color: var(--muted);
+  font-size: var(--font-label);
 }
 
 #frameLabel.is-changing {
@@ -1024,8 +1175,6 @@ h2 {
 
 
 .radarLegend {
-  right: 16px;
-  bottom: 20px;
   display: grid;
   gap: 4px;
   width: 184px;
@@ -1272,43 +1421,15 @@ h2 {
   font-size: var(--font-label);
 }
 
+/* Below this width the map leads and the panel becomes a drawer. Stacking the
+   panel above the map instead buried the map roughly 1600px down the page. */
 @media (max-width: 920px) {
-  .shell {
-    grid-template-columns: 1fr;
-    height: auto;
-    min-height: 100vh;
-    overflow: visible;
-  }
-
-  .panel {
-    min-height: 0;
-    padding: 16px;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .timeline {
-    flex: 0 0 auto;
-    min-height: 260px;
-  }
-
-  .hours {
-    max-height: 320px;
-  }
-
-  .mapPane {
-    min-height: 520px;
-  }
-}
-
-@media (max-width: 720px) {
   body {
     overflow: hidden;
     background: var(--bg);
   }
 
   .shell {
-    --mobile-toolbar-clearance: 250px;
     --control-height: 40px;
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
@@ -1382,12 +1503,8 @@ h2 {
   }
 
   .mobileForecastSheet {
-    position: absolute;
-    right: 12px;
+    width: 100%;
     height: auto;
-    bottom: calc(var(--mobile-toolbar-clearance) + env(safe-area-inset-bottom));
-    left: 12px;
-    z-index: 710;
     display: grid;
     gap: 8px;
     border: 1px solid rgb(16 20 24 / 12%);
@@ -1529,7 +1646,7 @@ h2 {
   }
 
   .hour {
-    grid-template-columns: 64px 1fr 32px;
+    grid-template-columns: 84px 1fr 32px;
     gap: 8px;
     font-size: 11px;
   }
@@ -1549,7 +1666,8 @@ h2 {
   .mapTop {
     top: calc(12px + env(safe-area-inset-top));
     left: 84px;
-    right: 12px;
+    /* Leaves room for the zoom control, which sits in the same corner. */
+    right: 64px;
     min-width: 0;
     padding: 8px 12px;
   }
@@ -1564,17 +1682,41 @@ h2 {
     background: rgb(17 21 25 / 92%);
   }
 
-  .mapToolbar {
+  .mapBottom {
     right: 12px;
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    /* Clears the Leaflet attribution, which paints above the overlays. */
+    bottom: calc(28px + env(safe-area-inset-bottom));
     left: 12px;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: auto;
+    margin: 0;
+  }
+
+  .mapToolbar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "play frame"
+      "refresh layer"
+      "opacity opacity";
     max-width: none;
     padding: 8px;
     background: rgb(17 21 25 / 95%);
-    transform: none;
+  }
+
+  #playRadar {
+    grid-area: play;
+  }
+
+  #refreshForecast {
+    grid-area: refresh;
+  }
+
+  #mapLayer {
+    grid-area: layer;
+  }
+
+  .opacityControl {
+    grid-area: opacity;
   }
 
   .mapToolbar button,
@@ -1585,9 +1727,9 @@ h2 {
   }
 
   .frameControl {
-    grid-column: 1 / -1;
+    grid-area: frame;
     min-width: 0;
-    padding: 4px 8px;
+    padding: 0 8px;
   }
 
   #frameLabel {
@@ -1610,13 +1752,7 @@ h2 {
   }
 
   .radarLegend {
-    right: 12px;
-    bottom: calc(var(--mobile-toolbar-clearance) + 106px + env(safe-area-inset-bottom));
     background: rgb(17 21 25 / 92%);
-  }
-
-  .mobileForecastSheet.is-open + .radarLegend {
-    display: none;
   }
 
   .leaflet-control-zoom {
@@ -1626,6 +1762,66 @@ h2 {
   .cityMarkerLabel {
     max-width: 118px;
     font-size: 11px;
+  }
+}
+
+/* On phones the map header has to stay one compact line, so the section name
+   gives way to the range it describes. */
+@media (max-width: 720px) {
+  .mapTop {
+    gap: 10px;
+    padding: 8px 10px;
+  }
+
+  .mapTop .overline {
+    display: none;
+  }
+
+  .mapTopMain {
+    overflow: hidden;
+  }
+
+  .mapTop strong {
+    display: block;
+    overflow: hidden;
+    font-size: var(--font-body);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Tablets keep the drawer layout but have room for the desktop control row. */
+@media (min-width: 721px) and (max-width: 920px) {
+  .shell {
+    --control-height: 32px;
+  }
+
+  .mapTop {
+    right: auto;
+    left: 96px;
+  }
+
+  .mapTop .layerState {
+    display: inline-flex;
+  }
+
+  .mapBottom {
+    right: 0;
+    bottom: calc(28px + env(safe-area-inset-bottom));
+    left: 0;
+    width: min(760px, calc(100% - 40px));
+    margin: 0 auto;
+  }
+
+  .mapToolbar {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+  }
+
+  .opacityControl input {
+    flex: 0 0 auto;
+    width: 82px;
   }
 }
 

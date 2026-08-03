@@ -99,6 +99,7 @@ const copy = {
     remove: "Rimuovi località",
     saved: "Salvati",
     threshold: "Avviso da",
+    settings: "Impostazioni",
     languageLabel: "Lingua",
     forecastRange: "Periodo",
     forecastDay: "Giorno",
@@ -127,6 +128,8 @@ const copy = {
     detailedMode: "Dettaglio",
     compactMode: "Compatta",
     trend: "Trend",
+    barKeyRisk: "Rischio",
+    barKeyStorm: "Intensità",
     route: "Percorso",
     history: "Storico",
     warnings: "Avvisi ufficiali",
@@ -167,6 +170,10 @@ const copy = {
     severeLabel: "Severo",
     risk: "rischio",
     riskPrefix: "Rischio",
+    severity: "Gravità",
+    peak: "Picco",
+    opacityLabel: "Livello",
+    riskHeadline: (label) => `Rischio ${label.toLowerCase()}`,
     alertTitle: "Rischio grandine",
     alertBody: (place, score) => `${place} ha raggiunto rischio ${score}.`,
     explanationEmpty: "Nessun segnale forte nel modello.",
@@ -191,6 +198,7 @@ const copy = {
     remove: "Remove location",
     saved: "Saved",
     threshold: "Alert from",
+    settings: "Settings",
     languageLabel: "Language",
     forecastRange: "Range",
     forecastDay: "Day",
@@ -219,6 +227,8 @@ const copy = {
     detailedMode: "Detailed",
     compactMode: "Compact",
     trend: "Trend",
+    barKeyRisk: "Risk",
+    barKeyStorm: "Intensity",
     route: "Route",
     history: "History",
     warnings: "Official warnings",
@@ -259,6 +269,10 @@ const copy = {
     severeLabel: "Severe",
     risk: "risk",
     riskPrefix: "Risk",
+    severity: "Severity",
+    peak: "Peak",
+    opacityLabel: "Layer",
+    riskHeadline: (label) => `${label} risk`,
     alertTitle: "Hail risk",
     alertBody: (place, score) => `${place} reached risk ${score}.`,
     explanationEmpty: "No strong signal in the model.",
@@ -287,6 +301,10 @@ const els = {
   scoreRing: document.querySelector("#scoreRing"),
   riskScore: document.querySelector("#riskScore"),
   riskLabel: document.querySelector("#riskLabel"),
+  riskUnit: document.querySelector("#riskUnit"),
+  severityLabel: document.querySelector("#severityLabel"),
+  peakLabel: document.querySelector("#peakLabel"),
+  opacityLabel: document.querySelector("#opacityLabel"),
   riskSummary: document.querySelector("#riskSummary"),
   riskExplain: document.querySelector("#riskExplain"),
   metrics: document.querySelector("#metrics"),
@@ -304,9 +322,13 @@ const els = {
   savedPlaces: document.querySelector("#savedPlaces"),
   savedTitle: document.querySelector("#savedTitle"),
   thresholdLabel: document.querySelector("#thresholdLabel"),
+  settingsBlock: document.querySelector("#settingsBlock"),
+  settingsSummary: document.querySelector("#settingsSummary"),
   languageLabel: document.querySelector("#languageLabel"),
   conditionsTitle: document.querySelector("#conditionsTitle"),
   hourlyTitle: document.querySelector("#hourlyTitle"),
+  barKeyRisk: document.querySelector("#barKeyRisk"),
+  barKeyStorm: document.querySelector("#barKeyStorm"),
   compareTitle: document.querySelector("#compareTitle"),
   modelNote: document.querySelector("#modelNote"),
   radarTitle: document.querySelector("#radarTitle"),
@@ -393,6 +415,7 @@ let preferences = {
   forecastOffsetHours: 0,
   autoRefresh: 0,
   detailMode: "detailed",
+  settingsOpen: false,
   mapLayer: "satellite",
   ...readJson(storageKeys.prefs, {})
 };
@@ -841,12 +864,12 @@ function renderRisk(place, forecast) {
   els.placeName.textContent = placeLabel(place);
   els.riskTime.textContent = `${formatDateTime(max.time, forecast.timezone)}`;
   els.riskScore.textContent = String(score);
-  els.riskLabel.textContent = `${t("riskPrefix")} ${label.toLowerCase()}`;
+  els.riskLabel.textContent = t("riskHeadline")(label);
   els.riskSummary.textContent = `${weatherText(max.weather_code)}. ${Math.round(
     max.precipitation_probability || 0
   )}% ${preferences.language === "it" ? "probabilità pioggia" : "rain probability"}. CAPE ${Math.round(max.cape || 0)} J/kg.`;
-  els.scoreRing.style.borderColor = color;
   els.scoreRing.style.setProperty("--risk-color", color);
+  els.scoreRing.style.setProperty("--risk-progress", String(score));
   const severeWindow = findSevereWindow(rows, forecast.timezone);
   els.hourRange.textContent = formatRangeLabel(rows, forecast.timezone);
   updateForecastWindowControls(rows);
@@ -889,10 +912,10 @@ function renderRisk(place, forecast) {
   els.warningLink.href = warningUrl(place);
   els.warningLink.textContent = t("warnings");
   els.sheetPlace.textContent = place.name;
-  els.sheetRiskLabel.textContent = `${t("riskPrefix")} ${label.toLowerCase()}`;
+  els.sheetRiskLabel.textContent = t("riskHeadline")(label);
   els.sheetScore.textContent = String(score);
   els.sheetScore.style.color = color;
-  els.sheetPeak.textContent = `${preferences.language === "it" ? "Picco" : "Peak"}: ${formatDateTime(max.time, forecast.timezone)}`;
+  els.sheetPeak.textContent = `${t("peak")}: ${formatDateTime(max.time, forecast.timezone)}`;
   els.sheetSevere.textContent = severeWindow || t("noRisk");
   els.sheetTrend.textContent = `${t("trend")}: ${trend}`;
 
@@ -1321,6 +1344,7 @@ function renderStaticText() {
   els.savePlace.textContent = isCurrentSaved() ? t("remove") : t("save");
   els.savedTitle.textContent = t("saved");
   els.thresholdLabel.textContent = t("threshold");
+  els.settingsSummary.textContent = t("settings");
   els.languageLabel.textContent = t("languageLabel");
   els.forecastRangeLabel.textContent = t("forecastRange");
   els.forecastDayLabel.textContent = t("forecastDay");
@@ -1335,7 +1359,13 @@ function renderStaticText() {
   els.exportReport.textContent = t("exportReport");
   els.renamePlace.textContent = t("renamePlace");
   els.conditionsTitle.textContent = t("conditions");
+  els.severityLabel.textContent = t("severity");
+  els.peakLabel.textContent = t("peak");
+  els.riskUnit.textContent = t("risk");
+  els.opacityLabel.textContent = t("opacityLabel");
   els.hourlyTitle.textContent = t("hourly");
+  els.barKeyRisk.textContent = t("barKeyRisk");
+  els.barKeyStorm.textContent = t("barKeyStorm");
   els.compareTitle.textContent = t("compare");
   els.modelNote.textContent = t("note");
   els.radarTitle.textContent = t("radarTitle");
@@ -1358,6 +1388,7 @@ function renderStaticText() {
   } else {
     updateRadarTimeScale();
     els.frameLabel.textContent = formatRadarFrameLabel(radarFrames[frameIndex]);
+    els.radarState.textContent = t("radarOutlook");
   }
   updateLastUpdated();
 }
@@ -1565,6 +1596,8 @@ function rerenderCurrent() {
   if (currentPlace && marker) marker.setIcon(cityMarkerIcon(currentPlace));
   refreshRiskView();
   refreshSavedComparison();
+  // The status line holds a message built in the previous language.
+  if (currentPlace && currentForecast) setStatus(`${t("synced")} ${currentPlace.name}`);
 }
 
 async function loadCurrentLocation() {
@@ -1599,7 +1632,7 @@ function buildReport() {
   return [
     `HailWatch · ${placeLabel(currentPlace)}`,
     `${t("riskPrefix")}: ${max.score} (${riskLabel(max.score)})`,
-    `${preferences.language === "it" ? "Picco" : "Peak"}: ${formatDateTime(max.time, currentForecast.timezone)}`,
+    `${t("peak")}: ${formatDateTime(max.time, currentForecast.timezone)}`,
     severeWindow,
     `${weatherText(max.weather_code)}, CAPE ${Math.round(max.cape || 0)} J/kg, ${Math.round(max.precipitation_probability || 0)}%`
   ].join("\n");
@@ -1793,6 +1826,10 @@ els.autoRefresh.addEventListener("change", () => {
   persistPreferences();
   configureAutoRefresh();
 });
+els.settingsBlock.addEventListener("toggle", () => {
+  preferences.settingsOpen = els.settingsBlock.open;
+  persistPreferences();
+});
 els.detailMode.addEventListener("change", () => {
   preferences.detailMode = els.detailMode.value;
   persistPreferences();
@@ -1833,6 +1870,7 @@ els.autoRefresh.value = String(Number(preferences.autoRefresh || 0));
 els.detailMode.value = preferences.detailMode === "compact" ? "compact" : "detailed";
 els.radarOpacity.value = String(preferences.radarOpacity);
 els.mapLayer.value = preferences.mapLayer;
+els.settingsBlock.open = Boolean(preferences.settingsOpen);
 applyDetailMode();
 configureAutoRefresh();
 renderStaticText();

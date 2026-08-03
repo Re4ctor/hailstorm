@@ -40,51 +40,54 @@
             <button type="button" id="savePlace">Salva località</button>
           </div>
           <div class="savedPlaces" id="savedPlaces"></div>
-          <div class="settingGrid">
-            <label for="riskThreshold" id="thresholdLabel">Avviso da</label>
-            <select id="riskThreshold">
-              <option value="40">40</option>
-              <option value="50" selected>50</option>
-              <option value="65">65</option>
-              <option value="80">80</option>
-            </select>
-            <label for="languageSelect" id="languageLabel">Lingua</label>
-            <select id="languageSelect">
-              <option value="it" selected>IT</option>
-              <option value="en">EN</option>
-            </select>
-            <label for="forecastHours" id="forecastRangeLabel">Periodo</label>
-            <select id="forecastHours">
-              <option value="24" selected>24h</option>
-              <option value="48">48h</option>
-            </select>
-            <label for="forecastDay" id="forecastDayLabel">Giorno</label>
-            <select id="forecastDay">
-              <option value="0" selected>Oggi</option>
-              <option value="1">Domani</option>
-              <option value="2">+2</option>
-              <option value="3">+3</option>
-              <option value="4">+4</option>
-              <option value="5">+5</option>
-              <option value="6">+6</option>
-            </select>
-            <label for="autoRefresh" id="autoRefreshLabel">Auto</label>
-            <select id="autoRefresh">
-              <option value="0" selected>Off</option>
-              <option value="10">10m</option>
-              <option value="30">30m</option>
-            </select>
-            <label for="detailMode" id="detailModeLabel">Vista</label>
-            <select id="detailMode">
-              <option value="detailed" selected>Dettaglio</option>
-              <option value="compact">Compatta</option>
-            </select>
-          </div>
-          <div class="actionRow">
-            <button type="button" id="copyReport">Copia report</button>
-            <button type="button" id="exportReport">Esporta report</button>
-            <button type="button" id="renamePlace">Rinomina</button>
-          </div>
+          <details class="settingsBlock" id="settingsBlock">
+            <summary id="settingsSummary">Impostazioni</summary>
+            <div class="settingGrid">
+              <label for="riskThreshold" id="thresholdLabel">Avviso da</label>
+              <select id="riskThreshold">
+                <option value="40">40</option>
+                <option value="50" selected>50</option>
+                <option value="65">65</option>
+                <option value="80">80</option>
+              </select>
+              <label for="languageSelect" id="languageLabel">Lingua</label>
+              <select id="languageSelect">
+                <option value="it" selected>IT</option>
+                <option value="en">EN</option>
+              </select>
+              <label for="forecastHours" id="forecastRangeLabel">Periodo</label>
+              <select id="forecastHours">
+                <option value="24" selected>24h</option>
+                <option value="48">48h</option>
+              </select>
+              <label for="forecastDay" id="forecastDayLabel">Giorno</label>
+              <select id="forecastDay">
+                <option value="0" selected>Oggi</option>
+                <option value="1">Domani</option>
+                <option value="2">+2</option>
+                <option value="3">+3</option>
+                <option value="4">+4</option>
+                <option value="5">+5</option>
+                <option value="6">+6</option>
+              </select>
+              <label for="autoRefresh" id="autoRefreshLabel">Auto</label>
+              <select id="autoRefresh">
+                <option value="0" selected>Off</option>
+                <option value="10">10m</option>
+                <option value="30">30m</option>
+              </select>
+              <label for="detailMode" id="detailModeLabel">Vista</label>
+              <select id="detailMode">
+                <option value="detailed" selected>Dettaglio</option>
+                <option value="compact">Compatta</option>
+              </select>
+            </div>
+            <div class="actionRow">
+              <button type="button" id="copyReport">Copia report</button>
+              <button type="button" id="exportReport">Esporta report</button>
+              <button type="button" id="renamePlace">Rinomina</button>
+            </div>
+          </details>
         </form>
 
         <section class="forecastState" id="forecastState" aria-live="polite" aria-busy="true">
@@ -101,18 +104,18 @@
         <section class="riskPanel forecastSurface" aria-live="polite">
           <div class="riskHeader">
             <div>
-              <span>Gravità</span>
+              <span id="severityLabel">Gravità</span>
               <strong id="riskLabel">Caricamento</strong>
             </div>
             <div>
-              <span>Picco</span>
+              <span id="peakLabel">Picco</span>
               <strong id="riskTime">Prossime 24 ore</strong>
             </div>
           </div>
           <div class="riskScore">
             <div class="scoreRing" id="scoreRing">
               <span id="riskScore">--</span>
-              <small>rischio</small>
+              <small id="riskUnit">rischio</small>
             </div>
             <div>
               <p id="riskSummary">Analisi delle condizioni temporalesche...</p>
@@ -133,6 +136,10 @@
             </div>
           </div>
           <div class="severeWindow" id="severeWindow">Finestra severa non disponibile</div>
+          <div class="barKey">
+            <span class="barKeyItem is-risk" id="barKeyRisk">Rischio</span>
+            <span class="barKeyItem is-storm" id="barKeyStorm">Intensità</span>
+          </div>
           <div class="hours" id="hours"></div>
         </section>
 
@@ -163,56 +170,60 @@
         <div id="map"></div>
         <button type="button" class="mobileSidebarToggle" id="mobileSidebarToggle" aria-controls="sidebar" aria-expanded="false">Dati</button>
         <div class="mapTop">
-          <div>
+          <div class="mapTopMain">
             <span class="overline" id="radarTitle">Radar e previsione precipitazioni</span>
             <strong id="radarSubtitle">Ultime 2 ore + prossime 10 ore</strong>
           </div>
-          <span class="layerState" id="radarState">Radar + 10 ore</span>
-        </div>
-        <div class="mapToolbar">
-          <button id="playRadar" type="button" aria-pressed="false" disabled>Riproduci</button>
-          <div class="frameControl">
-            <label id="frameLabel" for="frameSlider">Radar live</label>
-            <input id="frameSlider" type="range" min="0" max="0" value="0" step="1" disabled />
-            <div class="timeScale" aria-hidden="true"><span id="frameStart">-2h</span><span id="frameMid">-1h</span><span id="frameEnd">Ora</span></div>
+          <div class="mapTopMeta">
+            <span class="layerState" id="radarState">Radar + 10 ore</span>
+            <span class="refreshStamp" id="refreshStamp">Mai aggiornato</span>
           </div>
-          <button id="refreshForecast" title="Aggiorna radar">Aggiorna</button>
-          <select id="mapLayer" title="Livello mappa">
-            <option value="voyager" id="layerMap">Mappa</option>
-            <option value="satellite" id="layerSatellite">Satellite</option>
-            <option value="dark" id="layerDark">Scura</option>
-            <option value="terrain" id="layerTerrain">Terreno</option>
-          </select>
-          <label class="opacityControl" for="radarOpacity">
-            Livello
-            <input id="radarOpacity" type="range" min="30" max="90" value="72" />
-          </label>
         </div>
-        <div class="refreshStamp" id="refreshStamp">Mai aggiornato</div>
-        <button type="button" class="mobileForecastSheet" id="mobileForecastSheet" aria-expanded="false">
-          <span class="sheetHandle"></span>
-          <span class="sheetTop">
-            <span>
-              <span class="sheetPlace" id="sheetPlace">Milan</span>
-              <strong id="sheetRiskLabel">Caricamento</strong>
+        <div class="mapBottom">
+          <button type="button" class="mobileForecastSheet" id="mobileForecastSheet" aria-expanded="false">
+            <span class="sheetHandle"></span>
+            <span class="sheetTop">
+              <span>
+                <span class="sheetPlace" id="sheetPlace">Milan</span>
+                <strong id="sheetRiskLabel">Caricamento</strong>
+              </span>
+              <span class="sheetScore" id="sheetScore">--</span>
             </span>
-            <span class="sheetScore" id="sheetScore">--</span>
-          </span>
-          <span class="sheetMore">
-            <span id="sheetPeak">Picco: --</span>
-            <span id="sheetSevere">Finestra: --</span>
-            <span id="sheetTrend">Trend: --</span>
-          </span>
-        </button>
-        <div class="radarLegend" aria-label="Legenda intensità precipitazioni">
-          <div class="legendHeading">
-            <span id="legendWeak">Debole</span>
-            <span class="legendUnit">mm/h</span>
-            <span id="legendStrong">Forte</span>
+            <span class="sheetMore">
+              <span id="sheetPeak">Picco: --</span>
+              <span id="sheetSevere">Finestra: --</span>
+              <span id="sheetTrend">Trend: --</span>
+            </span>
+          </button>
+          <div class="radarLegend" aria-label="Legenda intensità precipitazioni">
+            <div class="legendHeading">
+              <span id="legendWeak">Debole</span>
+              <span class="legendUnit">mm/h</span>
+              <span id="legendStrong">Forte</span>
+            </div>
+            <div class="legendRamp" aria-hidden="true"></div>
+            <div class="legendTicks" aria-hidden="true">
+              <span>0.5</span><span>1</span><span>4</span><span>10+</span>
+            </div>
           </div>
-          <div class="legendRamp" aria-hidden="true"></div>
-          <div class="legendTicks" aria-hidden="true">
-            <span>0.5</span><span>1</span><span>4</span><span>10+</span>
+          <div class="mapToolbar">
+            <button id="playRadar" type="button" aria-pressed="false" disabled>Riproduci</button>
+            <div class="frameControl">
+              <label id="frameLabel" for="frameSlider">Radar live</label>
+              <input id="frameSlider" type="range" min="0" max="0" value="0" step="1" disabled />
+              <div class="timeScale" aria-hidden="true"><span id="frameStart">-2h</span><span id="frameMid">-1h</span><span id="frameEnd">Ora</span></div>
+            </div>
+            <button id="refreshForecast" title="Aggiorna radar">Aggiorna</button>
+            <select id="mapLayer" title="Livello mappa">
+              <option value="voyager" id="layerMap">Mappa</option>
+              <option value="satellite" id="layerSatellite">Satellite</option>
+              <option value="dark" id="layerDark">Scura</option>
+              <option value="terrain" id="layerTerrain">Terreno</option>
+            </select>
+            <label class="opacityControl" for="radarOpacity">
+              <span id="opacityLabel">Livello</span>
+              <input id="radarOpacity" type="range" min="30" max="90" value="72" />
+            </label>
           </div>
         </div>
       </section>
