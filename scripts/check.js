@@ -18,6 +18,14 @@ assert.match(js, /variable=cloud_cover/);
 assert.match(js, /cloudLayer\.setOpacity/);
 assert.match(js, /rainViewerRequestsPerMinute = 100/);
 assert.match(js, /function radarPlaybackDelay\(\)/);
+assert.match(js, /new AbortController\(\)/, "Network requests must time out");
+assert.match(js, /forecastCacheMaxEntries/, "Stored forecasts must stay bounded");
+assert.match(js, /document\.documentElement\.lang/, "Document language must follow the language setting");
+assert.equal(
+  (js.match(/await fetch\(/g) || []).length,
+  1,
+  "Every request must go through fetchJson, which is the only place allowed to call fetch"
+);
 assert.match(html, /id="playRadar"/);
 assert.match(html, /weather-map-layer/);
 assert.doesNotMatch(html + css + js, /[—–]/);

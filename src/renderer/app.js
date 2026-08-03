@@ -35,6 +35,13 @@ const cloudCoverColorScale = {
 };
 const rainViewerRequestsPerMinute = 100;
 const rainViewerPlaybackBudget = Math.floor(rainViewerRequestsPerMinute * 0.75);
+const requestTimeoutMs = 12000;
+const forecastFreshMs = 10 * 60 * 1000;
+const forecastCacheMaxAgeMs = 24 * 60 * 60 * 1000;
+const forecastCacheMaxEntries = 12;
+const notifiedMaxAgeMs = 48 * 60 * 60 * 1000;
+const comparisonConcurrency = 4;
+const radarFrameRevealMs = 8000;
 const storageKeys = {
   saved: "hailWatch.savedPlaces",
   prefs: "hailWatch.preferences",
@@ -359,6 +366,7 @@ let marker;
 let baseLayer;
 let weatherMapAdapter;
 let radarLayer;
+let visibleRadarLayer = null;
 const radarLayers = new Set();
 let radarFrames = [];
 let frameIndex = 0;
@@ -399,7 +407,26 @@ function readJson(key, fallback) {
 }
 
 function writeJson(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchJson(url, errorMessage) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(errorMessage);
+    return await response.json();
+  } catch (error) {
+    throw error.name === "AbortError" ? new Error(errorMessage) : error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function t(key) {
@@ -624,7 +651,18 @@ function analyzeHour(hour) {
   };
 }
 
+const hourlyRowsCache = new WeakMap();
+
 function getHourlyRows(forecast) {
+  if (!forecast) return [];
+  const cached = hourlyRowsCache.get(forecast);
+  if (cached && cached.language === preferences.language) return cached.rows;
+  const rows = buildHourlyRows(forecast);
+  hourlyRowsCache.set(forecast, { language: preferences.language, rows });
+  return rows;
+}
+
+function buildHourlyRows(forecast) {
   const hourly = forecast.hourly || {};
   return (hourly.time || []).map((time, index) => {
     const row = { time };
@@ -740,11 +778,17 @@ function rememberHistory(place, score) {
 }
 
 function formatRangeLabel(rows, timezone) {
-  if (!rows.length) return `${selectedForecastHours()}h`;
-  const visibleRows = selectedRows(rows);
+  const visibleRows = rows.length ? selectedRows(rows) : [];
+  if (!visibleRows.length) return `${selectedForecastHours()}h`;
   const first = visibleRows[0].time;
   const last = visibleRows[visibleRows.length - 1].time;
-  return `${formatHour(first, timezone)} -> ${formatHour(last, timezone)}`;
+  const dayOf = (time) =>
+    new Intl.DateTimeFormat("en-CA", { day: "2-digit", month: "2-digit", timeZone: timezone }).format(new Date(time));
+  // A window that crosses midnight reads as a backwards range without the day.
+  const end = dayOf(first) === dayOf(last)
+    ? formatHour(last, timezone)
+    : formatTimelineLabel(last, timezone, rows[0].time);
+  return `${formatHour(first, timezone)} -> ${end}`;
 }
 
 function formatDateTime(time, timezone) {
@@ -782,11 +826,17 @@ function findSevereWindow(rows, timezone) {
 function renderRisk(place, forecast) {
   const rows = getHourlyRows(forecast);
   const visibleRows = selectedRows(rows);
-  const max = visibleRows.reduce((best, row) => (row.score > best.score ? row : best), visibleRows[0] || rows[0]);
-  const score = max?.score || 0;
+  if (!visibleRows.length) {
+    els.placeName.textContent = placeLabel(place);
+    return false;
+  }
+  const max = visibleRows.reduce((best, row) => (row.score > best.score ? row : best), visibleRows[0]);
+  const score = max.score;
   const color = riskColor(score);
   const label = riskLabel(score);
-  const topReasons = (max?.reasons || []).slice(0, 4);
+  const topReasons = max.reasons.slice(0, 4);
+  const rainTotal = `${totalPrecipitation(rows).toFixed(1)} mm`;
+  const trend = riskTrend(rows);
 
   els.placeName.textContent = placeLabel(place);
   els.riskTime.textContent = `${formatDateTime(max.time, forecast.timezone)}`;
@@ -810,7 +860,7 @@ function renderRisk(place, forecast) {
     [t("metrics").gusts, `${Math.round(max.wind_gusts_10m || 0)} km/h`],
     [t("metrics").windDirection, windDirectionLabel(max.wind_direction_10m)],
     [t("metrics").showers, `${Number(max.showers || 0).toFixed(1)} mm`],
-    [t("metrics").totalRain, `${totalPrecipitation(rows).toFixed(1)} mm`],
+    [t("metrics").totalRain, rainTotal],
     [t("metrics").freezing, `${Math.round(max.freezing_level_height || 0)} m`]
   ]
     .map(([name, value]) => `<div class="metric"><span>${name}</span><strong>${value}</strong></div>`)
@@ -828,8 +878,8 @@ function renderRisk(place, forecast) {
     : `<div class="reason"><span>${t("explanationEmpty")}</span><strong>0</strong></div>`;
 
   els.insightPanel.innerHTML = [
-    [t("trend"), riskTrend(rows)],
-    [t("metrics").totalRain, `${totalPrecipitation(rows).toFixed(1)} mm`],
+    [t("trend"), trend],
+    [t("metrics").totalRain, rainTotal],
     [t("history"), historyDelta(place, score)],
     [t("metrics").windDirection, windDirectionLabel(max.wind_direction_10m)]
   ]
@@ -844,9 +894,9 @@ function renderRisk(place, forecast) {
   els.sheetScore.style.color = color;
   els.sheetPeak.textContent = `${preferences.language === "it" ? "Picco" : "Peak"}: ${formatDateTime(max.time, forecast.timezone)}`;
   els.sheetSevere.textContent = severeWindow || t("noRisk");
-  els.sheetTrend.textContent = `${t("trend")}: ${riskTrend(rows)}`;
+  els.sheetTrend.textContent = `${t("trend")}: ${trend}`;
 
-  els.hours.innerHTML = selectedRows(rows)
+  els.hours.innerHTML = visibleRows
     .map((row) => {
       const rowColor = riskColor(row.score);
       const intensity = stormIntensity(row);
@@ -862,6 +912,7 @@ function renderRisk(place, forecast) {
     })
     .join("");
 
+  return true;
 }
 
 async function searchCities(name, count = 5) {
@@ -871,9 +922,10 @@ async function searchCities(name, count = 5) {
   url.searchParams.set("language", preferences.language);
   url.searchParams.set("format", "json");
 
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(preferences.language === "it" ? "Ricerca non disponibile. Riprova." : "Search unavailable. Try again.");
-  const data = await response.json();
+  const data = await fetchJson(
+    url,
+    preferences.language === "it" ? "Ricerca non disponibile. Riprova." : "Search unavailable. Try again."
+  );
   return data.results || [];
 }
 
@@ -887,7 +939,41 @@ function cacheKey(place) {
   return `${placeKey(place)}:forecast-168h-v3`;
 }
 
-async function getForecast(place) {
+// Parsing the stored cache is expensive (a week of hourly data per place), so
+// entries are kept in memory once read and only re-serialized on a fresh fetch.
+const forecastMemory = new Map();
+
+function readForecastCache() {
+  const cache = readJson(storageKeys.forecastCache, {});
+  const cutoff = Date.now() - forecastCacheMaxAgeMs;
+  return Object.fromEntries(
+    Object.entries(cache)
+      .filter(([, entry]) => Number(entry?.at) > cutoff && entry?.forecast?.hourly?.time?.length)
+      .sort(([, a], [, b]) => Number(b.at) - Number(a.at))
+      .slice(0, forecastCacheMaxEntries)
+  );
+}
+
+function cachedForecastEntry(place) {
+  const key = cacheKey(place);
+  if (!forecastMemory.has(key)) forecastMemory.set(key, readForecastCache()[key] || null);
+  const entry = forecastMemory.get(key);
+  return Date.now() - Number(entry?.at) < forecastCacheMaxAgeMs ? entry : null;
+}
+
+function cacheForecast(place, forecast) {
+  const key = cacheKey(place);
+  const entry = { at: Date.now(), forecast };
+  forecastMemory.set(key, entry);
+  const cache = readForecastCache();
+  cache[key] = entry;
+  if (!writeJson(storageKeys.forecastCache, cache)) writeJson(storageKeys.forecastCache, { [key]: entry });
+}
+
+async function getForecast(place, { force = false } = {}) {
+  const cached = cachedForecastEntry(place);
+  if (!force && cached && Date.now() - Number(cached.at) < forecastFreshMs) return cached.forecast;
+
   const url = new URL(forecastUrl);
   url.searchParams.set("latitude", place.latitude);
   url.searchParams.set("longitude", place.longitude);
@@ -899,18 +985,13 @@ async function getForecast(place) {
   url.searchParams.set("timeformat", "unixtime");
   url.searchParams.set("timezone", "auto");
 
-  const forecastCache = readJson(storageKeys.forecastCache, {});
   try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(t("forecastError"));
-    const forecast = await response.json();
+    const forecast = await fetchJson(url, t("forecastError"));
     if (!forecast.hourly?.time?.length) throw new Error(t("forecastError"));
     forecast.hourly.time = forecast.hourly.time.map((time) => typeof time === "number" ? time * 1000 : time);
-    forecastCache[cacheKey(place)] = { at: Date.now(), forecast };
-    writeJson(storageKeys.forecastCache, forecastCache);
+    cacheForecast(place, forecast);
     return forecast;
   } catch (error) {
-    const cached = forecastCache[cacheKey(place)];
     if (cached?.forecast) {
       setStatus(preferences.language === "it" ? "Uso ultima previsione salvata" : "Using last saved forecast");
       return cached.forecast;
@@ -1022,13 +1103,13 @@ async function loadRadar() {
   const generation = ++radarLoadGeneration;
   stopRadarPlayback();
   els.radarState.textContent = t("loadingRadar");
-  const [radarResponse, forecastResponse] = await Promise.all([
-    fetch(radarMetadataUrl),
-    fetch(precipitationForecastUrl)
+  const [metadata, forecastMetadata] = await Promise.all([
+    fetchJson(radarMetadataUrl, preferences.language === "it" ? "Radar live non disponibile." : "Live radar unavailable."),
+    fetchJson(
+      precipitationForecastUrl,
+      preferences.language === "it" ? "Previsione precipitazioni non disponibile." : "Precipitation forecast unavailable."
+    )
   ]);
-  if (!radarResponse.ok) throw new Error(preferences.language === "it" ? "Radar live non disponibile." : "Live radar unavailable.");
-  if (!forecastResponse.ok) throw new Error(preferences.language === "it" ? "Previsione precipitazioni non disponibile." : "Precipitation forecast unavailable.");
-  const [metadata, forecastMetadata] = await Promise.all([radarResponse.json(), forecastResponse.json()]);
   if (generation !== radarLoadGeneration) return;
 
   const pastFrames = metadata.radar?.past || [];
@@ -1138,28 +1219,55 @@ function toggleRadarPlayback() {
   }, playbackDelay);
 }
 
+function discardRadarLayer(layer) {
+  if (!layer) return;
+  if (map?.hasLayer(layer)) map.removeLayer(layer);
+  radarLayers.delete(layer);
+  if (visibleRadarLayer === layer) visibleRadarLayer = null;
+}
+
 function showRadarFrame(index) {
   if (!map || !radarFrames.length) return;
   frameIndex = clampFrameIndex(index);
   const frame = radarFrames[frameIndex];
-  const nextLayer = createRadarLayer(frame).addTo(map);
+
+  let nextLayer;
+  try {
+    nextLayer = createRadarLayer(frame);
+  } catch (error) {
+    stopRadarPlayback();
+    els.radarState.textContent = t("radarError");
+    els.frameLabel.textContent = error.message;
+    return;
+  }
 
   radarLayer = nextLayer;
   radarLayers.add(nextLayer);
-  nextLayer.once("load", () => {
+  nextLayer.addTo(map);
+  // Keep at most the on-screen frame plus the one being requested, so fast
+  // scrubbing cannot pile up invisible layers on the map.
+  radarLayers.forEach((layer) => {
+    if (layer !== nextLayer && layer !== visibleRadarLayer) discardRadarLayer(layer);
+  });
+
+  let revealed = false;
+  const reveal = () => {
+    if (revealed) return;
+    revealed = true;
+    clearTimeout(revealTimer);
     if (nextLayer !== radarLayer) {
-      if (map.hasLayer(nextLayer)) map.removeLayer(nextLayer);
-      radarLayers.delete(nextLayer);
+      discardRadarLayer(nextLayer);
       return;
     }
     nextLayer.setOpacity(Number(preferences.radarOpacity) / 100);
+    visibleRadarLayer = nextLayer;
     radarLayers.forEach((layer) => {
-      if (layer !== nextLayer) {
-        if (map.hasLayer(layer)) map.removeLayer(layer);
-        radarLayers.delete(layer);
-      }
+      if (layer !== nextLayer) discardRadarLayer(layer);
     });
-  });
+  };
+  // A frame whose tiles never all resolve would otherwise stay invisible forever.
+  const revealTimer = setTimeout(reveal, radarFrameRevealMs);
+  nextLayer.once("load", reveal);
 
   els.frameLabel.textContent = formatRadarFrameLabel(frame);
   els.frameSlider.value = String(frameIndex);
@@ -1194,7 +1302,7 @@ function configureAutoRefresh() {
   const minutes = Number(preferences.autoRefresh || 0);
   if (minutes > 0) {
     autoRefreshTimer = setInterval(() => {
-      if (currentPlace) loadPlace(currentPlace);
+      if (currentPlace) loadPlace(currentPlace, { force: true });
       else refreshSavedComparison();
     }, minutes * 60 * 1000);
   }
@@ -1207,6 +1315,7 @@ function setMobileSidebar(open) {
 }
 
 function renderStaticText() {
+  document.documentElement.lang = preferences.language === "en" ? "en" : "it";
   document.querySelector("button[type='submit']").textContent = t("search");
   els.locationLabel.textContent = t("location");
   els.savePlace.textContent = isCurrentSaved() ? t("remove") : t("save");
@@ -1310,24 +1419,29 @@ async function refreshSavedComparison() {
     .map((place) => `<div class="compareItem"><span>${escapeHtml(place.name)}</span><strong>...</strong></div>`)
     .join("");
 
-  const updated = [];
+  const queue = [...savedPlaces].map((place, index) => ({ place, index }));
+  const results = new Array(queue.length);
   let failures = 0;
-  for (const place of [...savedPlaces]) {
-    try {
-      const forecast = await getForecast(place);
-      if (generation !== comparisonGeneration) return;
-      const rows = getHourlyRows(forecast);
-      const visibleRows = selectedRows(rows);
-      const max = visibleRows.reduce((best, row) => (row.score > best.score ? row : best), visibleRows[0] || rows[0]);
-      maybeNotify(place, max);
-      updated.push({ ...place, lastScore: max.score, lastTime: max.time, lastTimezone: forecast.timezone });
-    } catch {
-      failures += 1;
-      updated.push({ ...place, lastScore: null });
+  const worker = async () => {
+    while (queue.length && generation === comparisonGeneration) {
+      const { place, index } = queue.shift();
+      try {
+        const forecast = await getForecast(place);
+        const visibleRows = selectedRows(getHourlyRows(forecast));
+        if (!visibleRows.length) throw new Error(t("forecastError"));
+        const max = visibleRows.reduce((best, row) => (row.score > best.score ? row : best), visibleRows[0]);
+        maybeNotify(place, max);
+        results[index] = { ...place, lastScore: max.score, lastTime: max.time, lastTimezone: forecast.timezone };
+      } catch {
+        failures += 1;
+        results[index] = { ...place, lastScore: null };
+      }
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(comparisonConcurrency, queue.length) }, worker));
 
   if (generation !== comparisonGeneration) return;
+  const updated = results.filter(Boolean);
   setComparisonState(failures ? "error" : "ready", failures);
   savedPlaces = updated.sort((a, b) => Number(b.lastScore || 0) - Number(a.lastScore || 0));
   writeJson(storageKeys.saved, savedPlaces);
@@ -1361,8 +1475,11 @@ async function maybeNotify(place, max) {
   }
   if (Notification.permission !== "granted") return;
 
-  const notified = readJson(storageKeys.notified, {});
   const key = `${placeKey(place)}:${max.time}:${preferences.riskThreshold}`;
+  const cutoff = Date.now() - notifiedMaxAgeMs;
+  const notified = Object.fromEntries(
+    Object.entries(readJson(storageKeys.notified, {})).filter(([, at]) => Number(at) > cutoff)
+  );
   if (notified[key]) return;
   notified[key] = Date.now();
   writeJson(storageKeys.notified, notified);
@@ -1371,7 +1488,7 @@ async function maybeNotify(place, max) {
   });
 }
 
-async function loadPlace(place) {
+async function loadPlace(place, { force = false } = {}) {
   const generation = ++loadGeneration;
   let forecastRendered = false;
   citySearchGeneration += 1;
@@ -1387,16 +1504,17 @@ async function loadPlace(place) {
 
     setStatus(t("forecast"));
     setForecastState("loading");
-    const forecast = await getForecast(place);
+    const forecast = await getForecast(place, { force });
     if (generation !== loadGeneration) return;
     currentForecast = forecast;
-    renderRisk(place, currentForecast);
-    forecastRendered = true;
-    setForecastState("ready");
+    forecastRendered = renderRisk(place, currentForecast);
+    setForecastState(forecastRendered ? "ready" : "error");
     const rows = selectedRows(getHourlyRows(currentForecast));
-    const max = rows.reduce((best, row) => row.score > best.score ? row : best, rows[0]);
-    rememberHistory(place, max.score);
-    maybeNotify(place, max);
+    const max = rows.length ? rows.reduce((best, row) => (row.score > best.score ? row : best), rows[0]) : null;
+    if (max) {
+      rememberHistory(place, max.score);
+      maybeNotify(place, max);
+    }
     lastUpdatedAt = new Date();
     updateLastUpdated();
     writeJson(storageKeys.lastPlace, place);
@@ -1436,11 +1554,16 @@ async function loadCity(city) {
   }
 }
 
+function refreshRiskView() {
+  if (!currentPlace || !currentForecast) return;
+  setForecastState(renderRisk(currentPlace, currentForecast) ? "ready" : "error");
+}
+
 function rerenderCurrent() {
   renderStaticText();
   renderSavedPlaces();
   if (currentPlace && marker) marker.setIcon(cityMarkerIcon(currentPlace));
-  if (currentPlace && currentForecast) renderRisk(currentPlace, currentForecast);
+  refreshRiskView();
   refreshSavedComparison();
 }
 
@@ -1606,7 +1729,7 @@ els.compareList.addEventListener("click", (event) => {
 els.savePlace.addEventListener("click", saveCurrentPlace);
 els.useLocation.addEventListener("click", loadCurrentLocation);
 els.retryForecast.addEventListener("click", () => {
-  if (currentPlace) loadPlace(currentPlace);
+  if (currentPlace) loadPlace(currentPlace, { force: true });
   else loadCity(els.cityInput.value.trim());
 });
 els.retryComparison.addEventListener("click", refreshSavedComparison);
@@ -1630,7 +1753,7 @@ els.frameSlider.addEventListener("input", () => {
   showRadarFrame(Number(els.frameSlider.value));
 });
 els.refreshForecast.addEventListener("click", () => {
-  if (currentPlace) loadPlace(currentPlace);
+  if (currentPlace) loadPlace(currentPlace, { force: true });
 });
 els.riskThreshold.addEventListener("change", () => {
   preferences.riskThreshold = Number(els.riskThreshold.value);
@@ -1648,7 +1771,7 @@ function setForecastOffset(offset, commit = true) {
   preferences.forecastDay = selectedForecastDay();
   els.forecastDay.value = String(selectedForecastDay());
   if (commit) persistPreferences();
-  if (currentPlace && currentForecast) renderRisk(currentPlace, currentForecast);
+  refreshRiskView();
   if (commit) refreshSavedComparison();
 }
 
@@ -1693,7 +1816,7 @@ window.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
   if ((event.metaKey || event.ctrlKey) && key === "r") {
     event.preventDefault();
-    if (currentPlace) loadPlace(currentPlace);
+    if (currentPlace) loadPlace(currentPlace, { force: true });
   }
   if ((event.metaKey || event.ctrlKey) && key === "l") {
     event.preventDefault();
