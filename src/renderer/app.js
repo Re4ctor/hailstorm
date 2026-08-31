@@ -730,6 +730,23 @@ function addReason(reasons, label, points, value) {
   if (points > 0) reasons.push({ label, points: Math.round(points), value });
 }
 
+// Piecewise linear between anchor points. The anchors are the thresholds the
+// bands used to switch at, so the calibration at those values is unchanged,
+// but an hour now moves with its own conditions instead of sharing a number
+// with every other hour that landed in the same band.
+function interpolate(value, anchors) {
+  if (value <= anchors[0][0]) return anchors[0][1];
+  for (let index = 1; index < anchors.length; index += 1) {
+    const [fromValue, fromPoints] = anchors[index - 1];
+    const [toValue, toPoints] = anchors[index];
+    if (value <= toValue) {
+      const span = toValue - fromValue;
+      return fromPoints + (toPoints - fromPoints) * (span > 0 ? (value - fromValue) / span : 1);
+    }
+  }
+  return anchors[anchors.length - 1][1];
+}
+
 function analyzeHour(hour) {
   const code = Number(hour.weather_code || 0);
   const cape = Number(hour.cape || 0);
@@ -749,13 +766,9 @@ function analyzeHour(hour) {
   score += points;
   addReason(reasons, weatherText(code), points, "");
 
-  if (cape >= 2500) points = 36;
-  else if (cape >= 1500) points = 28;
-  else if (cape >= 800) points = 18;
-  else if (cape >= 300) points = 8;
-  else points = 0;
-  score += points;
-  addReason(reasons, "CAPE", points, `${Math.round(cape)} J/kg`);
+  const capePoints = interpolate(cape, [[150, 0], [300, 8], [800, 18], [1500, 28], [2500, 36]]);
+  score += capePoints;
+  addReason(reasons, "CAPE", capePoints, `${Math.round(cape)} J/kg`);
 
   points = Math.min(18, precipProb * 0.18);
   score += points;
@@ -769,20 +782,24 @@ function analyzeHour(hour) {
   score += points;
   addReason(reasons, t("metrics").showers, points, `${Number(showers).toFixed(1)} mm`);
 
-  if (gusts >= 80) points = 10;
-  else if (gusts >= 60) points = 7;
-  else if (gusts >= 45) points = 4;
-  else points = 0;
+  points = interpolate(gusts, [[30, 0], [45, 4], [60, 7], [80, 10]]);
   score += points;
   addReason(reasons, t("metrics").gusts, points, `${Math.round(gusts)} km/h`);
 
-  if (freezing >= 1800 && freezing <= 4200 && score > 18) {
-    score += 8;
-    addReason(reasons, t("metrics").freezing, 8, `${Math.round(freezing)} m`);
-  }
-  if (freezing > 5200) {
-    score -= 6;
-    reasons.push({ label: t("metrics").freezing, points: -6, value: `${Math.round(freezing)} m` });
+  // Hail needs a freezing level high enough to grow stones and low enough that
+  // they survive the fall, and none of that matters without convection to lift
+  // them, so the band is weighted by the CAPE term rather than gated on the
+  // running total.
+  const freezingFit = interpolate(freezing, [[1500, 0], [2200, 1], [3600, 1], [4600, 0]]);
+  points = 8 * freezingFit * Math.min(1, capePoints / 18);
+  score += points;
+  addReason(reasons, t("metrics").freezing, points, `${Math.round(freezing)} m`);
+
+  // A freezing level this high melts stones before they land.
+  const melting = interpolate(freezing, [[4600, 0], [5600, 6]]);
+  if (melting > 0) {
+    score -= melting;
+    reasons.push({ label: t("metrics").freezing, points: -Math.round(melting), value: `${Math.round(freezing)} m` });
   }
 
   return {
