@@ -1,4 +1,6 @@
 const geocodeUrl = "https://geocoding-api.open-meteo.com/v1/search";
+const forecastHourlyFields =
+  "weather_code,precipitation_probability,precipitation,showers,cape,wind_gusts_10m,wind_direction_10m,freezing_level_height";
 const forecastUrl = "https://api.open-meteo.com/v1/forecast";
 const radarMetadataUrl = "https://api.rainviewer.com/public/weather-maps.json";
 const precipitationForecastUrl = "https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json";
@@ -39,15 +41,20 @@ const requestTimeoutMs = 12000;
 const requestRetries = 2;
 const requestBackoffMs = 800;
 const requestMaxBackoffMs = 8000;
-// Kept well under each provider's published ceiling: the app is one of many
-// clients on a shared free tier, and a burst is what gets a key throttled.
+// Open-Meteo publishes 600 calls/min, 5.000/hour and 10.000/day on the free
+// non-commercial tier, with no API key. These caps sit at half the published
+// per-minute ceiling: enough headroom that a burst cannot trip the limit, and
+// still far more than this app can spend, because a forecast load is one
+// request and the saved-place comparison is one more regardless of its length.
 const hostRequestLimits = {
-  "api.open-meteo.com": { perMinute: 60, concurrency: 3 },
-  "geocoding-api.open-meteo.com": { perMinute: 30, concurrency: 2 },
-  "api.rainviewer.com": { perMinute: 20, concurrency: 2 },
-  "map-tiles.open-meteo.com": { perMinute: 20, concurrency: 2 }
+  "api.open-meteo.com": { perMinute: 300, concurrency: 6 },
+  "geocoding-api.open-meteo.com": { perMinute: 200, concurrency: 4 },
+  // RainViewer publishes no number for the free tier, so this one stays
+  // deliberately modest. Playback does not spend it: see prefetchRadarFrames.
+  "api.rainviewer.com": { perMinute: 30, concurrency: 3 },
+  "map-tiles.open-meteo.com": { perMinute: 60, concurrency: 4 }
 };
-const defaultRequestLimit = { perMinute: 30, concurrency: 2 };
+const defaultRequestLimit = { perMinute: 60, concurrency: 3 };
 const forecastFreshMs = 10 * 60 * 1000;
 const comparisonFreshMs = 20 * 60 * 1000;
 const forecastCacheMaxAgeMs = 24 * 60 * 60 * 1000;
@@ -57,10 +64,12 @@ const geocodeCacheMaxEntries = 60;
 const radarMetadataTtlMs = 2 * 60 * 1000;
 const suggestionDebounceMs = 340;
 const notifiedMaxAgeMs = 48 * 60 * 60 * 1000;
-const comparisonConcurrency = 3;
 const radarFrameRevealMs = 8000;
 const radarWarmPlaybackFloorMs = 1200;
 const radarCachedPlaybackMs = 420;
+const radarMaxNativeZoom = 7;
+const radarPrefetchTileCap = 24;
+const radarPrefetchGapMs = 220;
 const storageKeys = {
   saved: "hailWatch.savedPlaces",
   prefs: "hailWatch.preferences",
@@ -72,13 +81,11 @@ const storageKeys = {
 
 const mapLayers = {
   voyager: {
-    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
     options: {
-      subdomains: "abcd",
-      maxZoom: 20,
-      maxNativeZoom: 20,
-      attribution:
-        '&copy; OpenStreetMap contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+      maxZoom: 19,
+      maxNativeZoom: 19,
+      attribution: "Tiles &copy; Esri"
     }
   },
   satellite: {
@@ -90,13 +97,11 @@ const mapLayers = {
     }
   },
   dark: {
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
     options: {
-      subdomains: "abcd",
-      maxZoom: 20,
-      maxNativeZoom: 20,
-      attribution:
-        '&copy; OpenStreetMap contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+      maxZoom: 16,
+      maxNativeZoom: 16,
+      attribution: "Tiles &copy; Esri"
     }
   },
   terrain: {
@@ -650,8 +655,10 @@ function setComparisonState(state, failures = 0) {
 }
 
 function riskColor(score) {
-  if (score >= 75) return "var(--danger)";
-  if (score >= Number(preferences.riskThreshold)) return "var(--accent)";
+  if (score >= 75) return "var(--risk-severe)";
+  if (score >= 50) return "var(--risk-high)";
+  if (score >= 25) return "var(--risk-moderate)";
+  if (score >= 10) return "var(--risk-low)";
   return "var(--risk-neutral)";
 }
 
@@ -813,6 +820,14 @@ function formatHour(time, timezone) {
   return new Intl.DateTimeFormat(preferences.language === "it" ? "it-IT" : "en-US", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: timezone
+  }).format(new Date(time));
+}
+
+function formatAxisHour(time, timezone) {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hourCycle: "h23",
     timeZone: timezone
   }).format(new Date(time));
 }
@@ -1030,23 +1045,75 @@ function renderRisk(place, forecast) {
   els.sheetSevere.textContent = severeWindow || t("noRisk");
   els.sheetTrend.textContent = `${t("trend")}: ${trend}`;
 
+  renderHourlyChart(visibleRows, rows[0].time, forecast.timezone);
+
+  return true;
+}
+
+function renderHourlyChart(visibleRows, firstTime, timezone) {
+  const chart = els.hours.parentElement;
+  hideChartTip();
+  chart.style.setProperty("--threshold", String(Number(preferences.riskThreshold)));
+  // Roughly eight labels regardless of window length, so 24h and 48h read the
+  // same and the axis never collides with itself.
+  const tickStep = Math.max(1, Math.ceil(visibleRows.length / 8));
+
   els.hours.innerHTML = visibleRows
-    .map((row) => {
-      const rowColor = riskColor(row.score);
+    .map((row, index) => {
       const intensity = stormIntensity(row);
-      const severe = row.score >= Number(preferences.riskThreshold) ? " is-severe" : "";
-      return `<div class="hour${severe}">
-        <span>${formatTimelineLabel(row.time, forecast.timezone, rows[0].time)}</span>
-        <div class="bars">
-          <div class="bar"><div class="fill" style="width: ${row.score}%; background: ${rowColor}"></div></div>
-          <div class="bar is-storm"><div class="fill" style="width: ${intensity}%"></div></div>
-        </div>
-        <strong>${row.score}</strong>
+      const tick = index % tickStep === 0
+        ? `<span class="hourTick">${formatAxisHour(row.time, timezone)}</span>`
+        : "";
+      return `<div class="hourCol" style="--risk:${row.score};--storm:${intensity};--c:${riskColor(row.score)}"
+        data-when="${escapeHtml(formatTimelineLabel(row.time, timezone, firstTime))}"
+        data-score="${row.score}"
+        data-level="${escapeHtml(riskLabel(row.score))}"
+        data-storm="${intensity}"
+        data-cape="${Math.round(Number(row.cape || 0))}"
+        data-rain="${Math.round(Number(row.precipitation_probability || 0))}">
+        <span class="hourStorm"></span>
+        <span class="hourRisk"></span>
+        ${tick}
       </div>`;
     })
     .join("");
+}
 
-  return true;
+// An hourly chart people cannot interrogate is a picture. The tooltip is what
+// makes it readable: every column can be inspected without leaving the view.
+let chartTip = null;
+
+function ensureChartTip() {
+  if (chartTip?.isConnected) return chartTip;
+  chartTip = document.createElement("div");
+  chartTip.className = "chartTip";
+  chartTip.hidden = true;
+  els.hours.parentElement.appendChild(chartTip);
+  return chartTip;
+}
+
+function hideChartTip() {
+  if (chartTip) chartTip.hidden = true;
+}
+
+function showChartTip(column) {
+  const tip = ensureChartTip();
+  const plot = els.hours.parentElement;
+  const score = Number(column.dataset.score);
+  const metrics = t("metrics");
+  tip.style.setProperty("--c", column.style.getPropertyValue("--c"));
+  tip.innerHTML = `
+    <b>${escapeHtml(column.dataset.when)}</b>
+    <span class="tipRow"><span class="tipSeverity">${escapeHtml(column.dataset.level)}</span><strong>${score}</strong></span>
+    <span class="tipRow">${metrics.rain}<strong>${column.dataset.rain}%</strong></span>
+    <span class="tipRow">${metrics.cape}<strong>${column.dataset.cape} J/kg</strong></span>
+    <span class="tipRow">${t("barKeyStorm")}<strong>${column.dataset.storm}</strong></span>`;
+  tip.hidden = false;
+  // Clamped so a column at either edge does not push the tooltip out of the panel.
+  const half = tip.offsetWidth / 2;
+  const centre = column.offsetLeft + column.offsetWidth / 2;
+  tip.style.left = `${Math.max(half, Math.min(plot.clientWidth - half, centre))}px`;
+  tip.style.top = `${plot.clientHeight * (1 - Math.min(100, Math.max(0, score)) / 100)}px`;
 }
 
 // Typing "Milano" would otherwise cost a lookup per debounce, then cost them
@@ -1138,10 +1205,7 @@ async function getForecast(place, { force = false, freshMs = forecastFreshMs } =
   const url = new URL(forecastUrl);
   url.searchParams.set("latitude", place.latitude);
   url.searchParams.set("longitude", place.longitude);
-  url.searchParams.set(
-    "hourly",
-    "weather_code,precipitation_probability,precipitation,showers,cape,wind_gusts_10m,wind_direction_10m,freezing_level_height"
-  );
+  url.searchParams.set("hourly", forecastHourlyFields);
   url.searchParams.set("forecast_hours", "168");
   url.searchParams.set("timeformat", "unixtime");
   url.searchParams.set("timezone", "auto");
@@ -1159,6 +1223,58 @@ async function getForecast(place, { force = false, freshMs = forecastFreshMs } =
     }
     throw error;
   }
+}
+
+// Open-Meteo accepts comma-separated coordinates and answers with one array
+// entry per location, in input order. The saved list therefore costs a single
+// request no matter how long it is, and nothing at all when every place is
+// still warm in the cache.
+async function getForecastBatch(places, { freshMs = comparisonFreshMs } = {}) {
+  const forecasts = new Map();
+  const misses = [];
+  places.forEach((place) => {
+    const cached = cachedForecastEntry(place);
+    if (cached && Date.now() - Number(cached.at) < freshMs) forecasts.set(placeKey(place), cached.forecast);
+    else misses.push(place);
+  });
+  if (!misses.length) return forecasts;
+  // A single coordinate comes back as an object rather than an array, so the
+  // one-place case reuses the path that already handles that shape.
+  if (misses.length === 1) {
+    try {
+      forecasts.set(placeKey(misses[0]), await getForecast(misses[0], { freshMs }));
+    } catch {
+      /* Left out of the map, which the caller reports as a failed row. */
+    }
+    return forecasts;
+  }
+
+  const url = new URL(forecastUrl);
+  url.searchParams.set("latitude", misses.map((place) => place.latitude).join(","));
+  url.searchParams.set("longitude", misses.map((place) => place.longitude).join(","));
+  url.searchParams.set("hourly", forecastHourlyFields);
+  url.searchParams.set("forecast_hours", "168");
+  url.searchParams.set("timeformat", "unixtime");
+  url.searchParams.set("timezone", "auto");
+
+  try {
+    const payload = await fetchJson(url, t("forecastError"));
+    const entries = Array.isArray(payload) ? payload : [payload];
+    misses.forEach((place, index) => {
+      const forecast = entries[index];
+      if (!forecast?.hourly?.time?.length) return;
+      forecast.hourly.time = forecast.hourly.time.map((time) => (typeof time === "number" ? time * 1000 : time));
+      cacheForecast(place, forecast);
+      forecasts.set(placeKey(place), forecast);
+    });
+  } catch {
+    // One failed batch should not blank a list that still has usable history.
+    misses.forEach((place) => {
+      const cached = cachedForecastEntry(place);
+      if (cached?.forecast) forecasts.set(placeKey(place), cached.forecast);
+    });
+  }
+  return forecasts;
 }
 
 function selectedLayerConfig() {
@@ -1209,6 +1325,7 @@ function ensureMap(place) {
       map.createPane("weatherPane");
       map.getPane("weatherPane").classList.add("weatherPane");
       map.on("moveend", updateWeatherMapBounds);
+      map.on("moveend", queueRadarPrefetch);
       updateWeatherMapBounds();
     }
   } else {
@@ -1226,6 +1343,22 @@ function ensureMap(place) {
   }
   renderSavedMarkers();
   requestAnimationFrame(() => map.invalidateSize());
+}
+
+let radarPrefetchTimer = null;
+let radarPrefetchWanted = false;
+
+// Debounced, because loading a place settles the map over several moveend
+// events and each one would otherwise start its own pass.
+function queueRadarPrefetch() {
+  if (!radarPrefetchWanted) return;
+  clearTimeout(radarPrefetchTimer);
+  radarPrefetchTimer = setTimeout(prefetchRadarFrames, 600);
+}
+
+function requestRadarPrefetch() {
+  radarPrefetchWanted = true;
+  queueRadarPrefetch();
 }
 
 function createRadarLayer(frame) {
@@ -1255,7 +1388,7 @@ function createRadarLayer(frame) {
   return L.tileLayer(frame.url, {
     opacity: 0,
     maxZoom: 16,
-    maxNativeZoom: 7,
+    maxNativeZoom: radarMaxNativeZoom,
     attribution: 'Radar &copy; <a href="https://www.rainviewer.com/">RainViewer</a>'
   });
 }
@@ -1333,6 +1466,7 @@ async function loadRadar({ force = false } = {}) {
   els.playRadar.disabled = radarFrames.length <= 1;
   updateRadarTimeScale();
   showRadarFrame(frameIndex);
+  queueRadarPrefetch();
 }
 
 function clampFrameIndex(index) {
@@ -1385,13 +1519,89 @@ function rainViewerFrameTileCount() {
   return (Math.ceil(size.x / 256) + 1) * (Math.ceil(size.y / 256) + 1);
 }
 
-// The first pass through the timeline pulls tiles at a rate the radar host is
-// happy with. Once a frame has been shown its tiles are in the HTTP cache, so
-// replaying it costs no requests and can run at a watchable speed.
+// Only the observed radar frames cost tile requests; the forecast frames are
+// drawn by the weather layer from data it already holds. So the question that
+// sets playback speed is whether every radar frame is warm.
+function radarFramesAreWarm() {
+  const liveFrames = radarFrames.filter((frame) => frame.source === "radar");
+  return liveFrames.length > 0 && liveFrames.every((frame) => seenRadarFrames.has(frame.time));
+}
+
+// Once a frame's tiles are in the HTTP cache, replaying it costs no requests
+// and can run at a watchable speed. Until then playback is paced to a rate the
+// radar host is happy with.
 function radarPlaybackDelay() {
-  if (radarFrames.length && seenRadarFrames.size >= radarFrames.length) return radarCachedPlaybackMs;
+  if (radarFramesAreWarm()) return radarCachedPlaybackMs;
   const budgeted = Math.ceil((rainViewerFrameTileCount() * 60 * 1000) / rainViewerPlaybackBudget);
   return Math.max(radarWarmPlaybackFloorMs, budgeted);
+}
+
+// The tiles the radar layer would request for what is currently on screen.
+// RainViewer serves radar up to zoom 7, so anything closer reuses those tiles.
+function visibleRadarTiles() {
+  if (!map) return [];
+  const zoom = Math.min(map.getZoom(), radarMaxNativeZoom);
+  const bounds = map.getBounds();
+  const topLeft = map.project(bounds.getNorthWest(), zoom).divideBy(256).floor();
+  const bottomRight = map.project(bounds.getSouthEast(), zoom).divideBy(256).floor();
+  const span = 2 ** zoom;
+  const tiles = [];
+  for (let x = topLeft.x; x <= bottomRight.x; x += 1) {
+    for (let y = topLeft.y; y <= bottomRight.y; y += 1) {
+      if (y < 0 || y >= span) continue;
+      tiles.push({ z: zoom, x: ((x % span) + span) % span, y });
+      if (tiles.length >= radarPrefetchTileCap) return tiles;
+    }
+  }
+  return tiles;
+}
+
+function radarTileUrl(frame, tile) {
+  return frame.url
+    .replace("{z}", String(tile.z))
+    .replace("{x}", String(tile.x))
+    .replace("{y}", String(tile.y));
+}
+
+function warmTile(url) {
+  return new Promise((resolve) => {
+    const image = new Image();
+    // Resolving on failure too: a missing tile must not stall the queue.
+    image.onload = resolve;
+    image.onerror = resolve;
+    image.src = url;
+  });
+}
+
+// A warm set belongs to one viewport. Panning invalidates it, so the signature
+// below is what tells the prefetcher its work no longer applies.
+let radarWarmKey = null;
+let radarPrefetchToken = 0;
+
+async function prefetchRadarFrames() {
+  if (!map || !radarFrames.length) return;
+  // Honour a metered connection: this is an optimisation, not a requirement.
+  if (navigator.connection?.saveData) return;
+
+  const tiles = visibleRadarTiles();
+  if (!tiles.length) return;
+  const warmKey = `${tiles[0].z}:${tiles[0].x},${tiles[0].y}:${tiles.length}`;
+  if (warmKey !== radarWarmKey) {
+    radarWarmKey = warmKey;
+    seenRadarFrames.clear();
+  }
+
+  const token = ++radarPrefetchToken;
+  for (const frame of radarFrames) {
+    if (token !== radarPrefetchToken) return;
+    if (frame.source !== "radar" || seenRadarFrames.has(frame.time)) continue;
+    await Promise.all(tiles.map((tile) => warmTile(radarTileUrl(frame, tile))));
+    if (token !== radarPrefetchToken) return;
+    seenRadarFrames.add(frame.time);
+    // One frame at a time, with a breath between them, so warming the timeline
+    // never competes with the tiles the visible frame still needs.
+    await wait(radarPrefetchGapMs);
+  }
 }
 
 function scheduleRadarStep() {
@@ -1415,6 +1625,8 @@ function toggleRadarPlayback() {
   }
   els.playRadar.setAttribute("aria-pressed", "true");
   els.playRadar.textContent = t("pauseRadar");
+  // Warming runs alongside the first pass, so playback speeds up as it catches up.
+  requestRadarPrefetch();
   scheduleRadarStep();
 }
 
@@ -1637,30 +1849,22 @@ async function refreshSavedComparison() {
     .map((place) => `<div class="compareItem"><span>${escapeHtml(place.name)}</span><strong>...</strong></div>`)
     .join("");
 
-  const queue = [...savedPlaces].map((place, index) => ({ place, index }));
-  const results = new Array(queue.length);
-  let failures = 0;
-  const worker = async () => {
-    while (queue.length && generation === comparisonGeneration) {
-      const { place, index } = queue.shift();
-      try {
-        // Background list entries tolerate older data than the focused place.
-        const forecast = await getForecast(place, { freshMs: comparisonFreshMs });
-        const visibleRows = selectedRows(getHourlyRows(forecast));
-        if (!visibleRows.length) throw new Error(t("forecastError"));
-        const max = visibleRows.reduce((best, row) => (row.score > best.score ? row : best), visibleRows[0]);
-        maybeNotify(place, max);
-        results[index] = { ...place, lastScore: max.score, lastTime: max.time, lastTimezone: forecast.timezone };
-      } catch {
-        failures += 1;
-        results[index] = { ...place, lastScore: null };
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(comparisonConcurrency, queue.length) }, worker));
-
+  // Background list entries tolerate older data than the focused place.
+  const forecasts = await getForecastBatch(savedPlaces);
   if (generation !== comparisonGeneration) return;
-  const updated = results.filter(Boolean);
+
+  let failures = 0;
+  const updated = savedPlaces.map((place) => {
+    const forecast = forecasts.get(placeKey(place));
+    const visibleRows = forecast ? selectedRows(getHourlyRows(forecast)) : [];
+    if (!visibleRows.length) {
+      failures += 1;
+      return { ...place, lastScore: null };
+    }
+    const max = visibleRows.reduce((best, row) => (row.score > best.score ? row : best), visibleRows[0]);
+    maybeNotify(place, max);
+    return { ...place, lastScore: max.score, lastTime: max.time, lastTimezone: forecast.timezone };
+  });
   setComparisonState(failures ? "error" : "ready", failures);
   savedPlaces = updated.sort((a, b) => Number(b.lastScore || 0) - Number(a.lastScore || 0));
   writeJson(storageKeys.saved, savedPlaces);
@@ -1954,6 +2158,12 @@ els.compareList.addEventListener("click", (event) => {
   }
 });
 
+els.hours.addEventListener("pointerover", (event) => {
+  const column = event.target.closest(".hourCol");
+  if (column) showChartTip(column);
+});
+els.hours.parentElement.addEventListener("pointerleave", hideChartTip);
+
 els.savePlace.addEventListener("click", saveCurrentPlace);
 els.useLocation.addEventListener("click", loadCurrentLocation);
 els.retryForecast.addEventListener("click", () => {
@@ -1978,6 +2188,7 @@ els.renamePlace.addEventListener("click", renameCurrentSavedPlace);
 els.playRadar.addEventListener("click", toggleRadarPlayback);
 els.frameSlider.addEventListener("input", () => {
   stopRadarPlayback();
+  requestRadarPrefetch();
   showRadarFrame(Number(els.frameSlider.value));
 });
 els.refreshForecast.addEventListener("click", () => {

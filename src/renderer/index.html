@@ -4,26 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HailWatch</title>
+    <meta name="description" content="Hail risk estimates, live radar, and precipitation forecasts for any city." />
+    <meta name="theme-color" content="#0b0e11" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap"
+    />
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       crossorigin=""
     />
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=meteo-layer" />
+    <link rel="stylesheet" href="./styles.css?v=instrument" />
   </head>
   <body>
     <main class="shell">
-      <section class="panel" id="sidebar">
-        <div class="panelTop">
-          <header class="brand">
-            <div>
-              <h1>HailWatch</h1>
-              <p id="placeName">Milan, Italy</p>
-            </div>
-            <span class="statusLine" id="statusLine">Pronto</span>
-          </header>
-        </div>
+      <aside class="panel" id="sidebar">
+        <header class="brand">
+          <div class="brandMark" aria-hidden="true"></div>
+          <div class="brandCopy">
+            <h1>HailWatch</h1>
+            <p id="placeName">Milan, Italy</p>
+          </div>
+          <span class="statusLine" id="statusLine">Pronto</span>
+        </header>
 
         <form class="search" id="searchForm">
           <div class="fieldTop">
@@ -31,15 +38,17 @@
             <button type="button" class="textButton" id="useLocation">Usa la mia posizione</button>
           </div>
           <div class="searchRow">
-            <input id="cityInput" name="city" value="Milan" autocomplete="off" />
+            <input id="cityInput" name="city" value="Milan" autocomplete="off" placeholder="Milan" />
             <button type="submit">Cerca</button>
           </div>
           <div class="suggestions" id="suggestions"></div>
+
           <div class="savedHead">
-            <span id="savedTitle">Salvati</span>
-            <button type="button" id="savePlace">Salva località</button>
+            <span class="overline" id="savedTitle">Salvati</span>
+            <button type="button" class="textButton" id="savePlace">Salva località</button>
           </div>
           <div class="savedPlaces" id="savedPlaces"></div>
+
           <details class="settingsBlock" id="settingsBlock">
             <summary id="settingsSummary">Impostazioni</summary>
             <div class="settingGrid">
@@ -101,20 +110,22 @@
           <button type="button" id="retryForecast" hidden>Riprova</button>
         </section>
 
-        <section class="riskPanel forecastSurface" id="riskPanel" aria-live="polite">
-          <div class="cardHead">
-            <span class="cardLabel" id="severityLabel">Gravità</span>
+        <section class="block riskPanel forecastSurface" id="riskPanel" aria-live="polite">
+          <div class="blockHead">
+            <span class="overline" id="severityLabel">Gravità</span>
             <span class="riskChip" id="riskChip"><strong id="riskLabel">Caricamento</strong></span>
           </div>
           <div class="riskHero">
-            <div class="scoreRing" id="scoreRing">
-              <span id="riskScore">--</span>
-              <small id="riskUnit">rischio</small>
+            <div class="scoreBlock">
+              <div class="scoreRing" id="scoreRing">
+                <span id="riskScore">--</span>
+              </div>
+              <small class="scoreUnit" id="riskUnit">rischio</small>
             </div>
             <div class="riskHeroCopy">
               <p id="riskSummary">Analisi delle condizioni temporalesche...</p>
               <div class="peakRow">
-                <span id="peakLabel">Picco</span>
+                <span class="overline" id="peakLabel">Picco</span>
                 <strong id="riskTime">Prossime 24 ore</strong>
               </div>
             </div>
@@ -124,31 +135,37 @@
           <a class="warningLink" id="warningLink" href="#" target="_blank" rel="noreferrer">Avvisi ufficiali</a>
         </section>
 
-        <section class="timeline forecastSurface">
-          <div class="timelineHead">
-            <div class="sectionTitle" id="hourlyTitle">Rischio orario</div>
+        <section class="block timeline forecastSurface">
+          <div class="blockHead">
+            <span class="overline" id="hourlyTitle">Rischio orario</span>
             <div class="forecastWindowControl">
-              <button type="button" id="prevForecastWindow" title="Ore precedenti">‹</button>
+              <button type="button" id="prevForecastWindow" title="Ore precedenti" aria-label="Ore precedenti">‹</button>
               <span id="hourRange">24 ore</span>
-              <button type="button" id="nextForecastWindow" title="Ore successive">›</button>
+              <button type="button" id="nextForecastWindow" title="Ore successive" aria-label="Ore successive">›</button>
             </div>
           </div>
           <div class="severeWindow" id="severeWindow">Finestra severa non disponibile</div>
+          <div class="chart">
+            <div class="hours" id="hours"></div>
+          </div>
           <div class="barKey">
             <span class="barKeyItem is-risk" id="barKeyRisk">Rischio</span>
             <span class="barKeyItem is-storm" id="barKeyStorm">Intensità</span>
           </div>
-          <div class="hours" id="hours"></div>
         </section>
 
-        <section class="conditions forecastSurface">
-          <div class="sectionTitle" id="conditionsTitle">Condizioni</div>
+        <section class="block conditions forecastSurface">
+          <div class="blockHead">
+            <span class="overline" id="conditionsTitle">Condizioni</span>
+          </div>
           <div class="metrics" id="metrics"></div>
         </section>
 
-        <section class="compareBlock">
-          <div class="sectionTitle" id="compareTitle">Confronto salvati</div>
-          <div class="routeSummary" id="routeSummary"></div>
+        <section class="block compareBlock">
+          <div class="blockHead">
+            <span class="overline" id="compareTitle">Confronto salvati</span>
+            <span class="routeSummary" id="routeSummary"></span>
+          </div>
           <div class="compareStatus" id="compareStatus" role="status" hidden>
             <span id="compareStatusText"></span>
             <button type="button" id="retryComparison" hidden>Riprova</button>
@@ -160,13 +177,14 @@
           La forza della grandine è una stima basata su temporali, CAPE, precipitazioni,
           rovesci, raffiche e quota dello zero termico. Usa gli avvisi ufficiali per la sicurezza.
         </p>
-      </section>
+      </aside>
 
       <div class="mobileDrawerBackdrop" id="mobileDrawerBackdrop"></div>
 
       <section class="mapPane">
         <div id="map"></div>
         <button type="button" class="mobileSidebarToggle" id="mobileSidebarToggle" aria-controls="sidebar" aria-expanded="false">Dati</button>
+
         <div class="mapTop">
           <div class="mapTopMain">
             <span class="overline" id="radarTitle">Radar e previsione precipitazioni</span>
@@ -177,6 +195,7 @@
             <span class="refreshStamp" id="refreshStamp">Mai aggiornato</span>
           </div>
         </div>
+
         <div class="mapBottom">
           <button type="button" class="mobileForecastSheet" id="mobileForecastSheet" aria-expanded="false">
             <span class="sheetHandle"></span>
@@ -193,6 +212,7 @@
               <span id="sheetTrend">Trend: --</span>
             </span>
           </button>
+
           <div class="radarLegend" aria-label="Legenda intensità precipitazioni">
             <div class="legendHeading">
               <span id="legendWeak">Debole</span>
@@ -204,14 +224,15 @@
               <span>0.5</span><span>1</span><span>4</span><span>10+</span>
             </div>
           </div>
+
           <div class="mapToolbar">
-            <button id="playRadar" type="button" aria-pressed="false" disabled>Riproduci</button>
+            <button id="playRadar" type="button" class="iconButton" aria-pressed="false" disabled>Riproduci</button>
             <div class="frameControl">
               <label id="frameLabel" for="frameSlider">Radar live</label>
               <input id="frameSlider" type="range" min="0" max="0" value="0" step="1" disabled />
               <div class="timeScale" aria-hidden="true"><span id="frameStart">-2h</span><span id="frameMid">-1h</span><span id="frameEnd">Ora</span></div>
             </div>
-            <button id="refreshForecast" title="Aggiorna radar">Aggiorna</button>
+            <button id="refreshForecast" class="iconButton" title="Aggiorna radar">Aggiorna</button>
             <select id="mapLayer" title="Livello mappa">
               <option value="voyager" id="layerMap">Mappa</option>
               <option value="satellite" id="layerSatellite">Satellite</option>
@@ -233,6 +254,6 @@
       crossorigin=""
     ></script>
     <script src="https://unpkg.com/@openmeteo/weather-map-layer@0.0.19/dist/index.js"></script>
-    <script src="./app.js?v=radar-forecast"></script>
+    <script src="./app.js?v=instrument"></script>
   </body>
 </html>
